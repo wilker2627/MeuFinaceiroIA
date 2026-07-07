@@ -130,6 +130,8 @@ interface Summary {
   }
 }
 
+type ReportPeriod = 'CURRENT_MONTH' | 'LAST_3_MONTHS' | 'LAST_12_MONTHS'
+
 const PAYMENT_METHOD_META: Record<string, { label: string; icon: any; className: string }> = {
   PIX: { label: 'PIX', icon: QrCode, className: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
   CASH: { label: 'Dinheiro', icon: Wallet, className: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
@@ -165,6 +167,7 @@ export default function DashboardPage() {
   const [totalBalanceMessage, setTotalBalanceMessage] = useState('')
   const [reportMessage, setReportMessage] = useState('')
   const [exportingReport, setExportingReport] = useState(false)
+  const [reportPeriod, setReportPeriod] = useState<ReportPeriod>('CURRENT_MONTH')
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -320,23 +323,90 @@ export default function DashboardPage() {
     }
   }
 
+  function getRecentMonthKeys(count: number) {
+    const now = new Date()
+    return Array.from({ length: count }, (_, index) => {
+      const d = new Date(now.getFullYear(), now.getMonth() - index, 1)
+      const month = String(d.getMonth() + 1).padStart(2, '0')
+      return `${d.getFullYear()}-${month}`
+    })
+  }
+
+  function formatMonthKeyToPtBr(monthKey: string) {
+    const [year, month] = monthKey.split('-').map(Number)
+    return new Date(year, month - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  }
+
   async function handleExportPdfReport() {
     setReportMessage('')
     setExportingReport(true)
 
     try {
       const [{ jsPDF }] = await Promise.all([import('jspdf')])
+
+      let reportPeriodLabel = summary.currentMonth
+      let reportIncome = Number(summary.cashFlow.income || 0)
+      let reportExpenses = Number(summary.cashFlow.expenses || 0)
+      let reportProfit = Number(summary.cashFlow.profit || 0)
+      let reportTopSpending: Array<{ name: string; amount: number }> = summary.family.topSpending
+      let reportCategories: Array<{ name: string; total: number }> = categories
+      let reportEvolution: Array<{ month: string; income: number; expenses: number }> = evolution
+      let moodLabel = summary.family.mood === 'EXCELLENT'
+        ? 'Excelente'
+        : summary.family.mood === 'ATTENTION'
+          ? 'Atencao'
+          : 'Cuidado'
+
+      if (reportPeriod !== 'CURRENT_MONTH') {
+        const monthsCount = reportPeriod === 'LAST_3_MONTHS' ? 3 : 12
+        const monthKeys = getRecentMonthKeys(monthsCount)
+
+        const [cashflows, categoriesByMonth, expensesByMonth, evolutionData] = await Promise.all([
+          Promise.all(monthKeys.map((month) => api.get(`/dashboard/cashflow?month=${month}`).then((r) => r.data))),
+          Promise.all(monthKeys.map((month) => api.get(`/dashboard/categories?month=${month}`).then((r) => r.data))),
+          Promise.all(monthKeys.map((month) => api.get(`/dashboard/transactions?month=${month}&type=EXPENSE&limit=500&page=1`).then((r) => r.data?.transactions || []))),
+          api.get(`/dashboard/evolution?months=${monthsCount}`).then((r) => r.data),
+        ])
+
+        reportIncome = cashflows.reduce((sum: number, item: any) => sum + Number(item?.income || 0), 0)
+        reportExpenses = cashflows.reduce((sum: number, item: any) => sum + Number(item?.expenses || 0), 0)
+        reportProfit = reportIncome - reportExpenses
+
+        const categoryTotals = new Map<string, number>()
+        categoriesByMonth.flat().forEach((item: any) => {
+          const key = String(item?.name || 'Sem categoria')
+          const value = Number(item?.total || 0)
+          categoryTotals.set(key, (categoryTotals.get(key) || 0) + value)
+        })
+        reportCategories = Array.from(categoryTotals.entries())
+          .map(([name, total]) => ({ name, total }))
+          .sort((a, b) => b.total - a.total)
+
+        const spendingTotals = new Map<string, number>()
+        expensesByMonth.flat().forEach((tx: any) => {
+          const key = String(tx?.description || 'Despesa sem descricao')
+          const value = Number(tx?.amount || 0)
+          spendingTotals.set(key, (spendingTotals.get(key) || 0) + value)
+        })
+        reportTopSpending = Array.from(spendingTotals.entries())
+          .map(([name, amount]) => ({ name, amount }))
+          .sort((a, b) => b.amount - a.amount)
+          .slice(0, 8)
+
+        reportEvolution = evolutionData
+
+        const oldest = monthKeys[monthKeys.length - 1]
+        const newest = monthKeys[0]
+        reportPeriodLabel = `${formatMonthKeyToPtBr(oldest)} a ${formatMonthKeyToPtBr(newest)}`
+        moodLabel = reportProfit >= 0 ? 'Excelente' : reportProfit > -(reportIncome * 0.15) ? 'Atencao' : 'Cuidado'
+      }
+
       const doc = new jsPDF({ unit: 'pt', format: 'a4' })
       const pageWidth = doc.internal.pageSize.getWidth()
       const marginX = 44
       const contentWidth = pageWidth - marginX * 2
       const now = new Date()
       const generatedAt = now.toLocaleString('pt-BR')
-      const moodLabel = summary.family.mood === 'EXCELLENT'
-        ? 'Excelente'
-        : summary.family.mood === 'ATTENTION'
-          ? 'Atencao'
-          : 'Cuidado'
 
       let y = 56
 
@@ -362,7 +432,7 @@ export default function DashboardPage() {
       doc.text('Relatorio Financeiro', marginX + 16, 60)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'normal')
-      doc.text(`Periodo: ${summary.currentMonth}`, marginX + 16, 82)
+      doc.text(`Periodo: ${reportPeriodLabel}`, marginX + 16, 82)
       doc.text(`Gerado em: ${generatedAt}`, marginX + 16, 98)
 
       y = 146
@@ -373,10 +443,10 @@ export default function DashboardPage() {
       y += 24
       doc.setFontSize(11)
 
-      writeLine('Saldo total:', formatCurrency(summary.balance.total))
-      writeLine('Entradas do mes:', formatCurrency(summary.cashFlow.income))
-      writeLine('Saidas do mes:', formatCurrency(summary.cashFlow.expenses))
-      writeLine('Lucro do mes:', formatCurrency(summary.cashFlow.profit))
+      writeLine('Saldo total atual:', formatCurrency(summary.balance.total))
+      writeLine('Entradas no periodo:', formatCurrency(reportIncome))
+      writeLine('Saidas no periodo:', formatCurrency(reportExpenses))
+      writeLine('Resultado no periodo:', formatCurrency(reportProfit))
       writeLine('Humor financeiro:', moodLabel)
       writeLine('A pagar:', formatCurrency(summary.payable.total))
       writeLine('A receber:', formatCurrency(summary.receivable.total))
@@ -389,11 +459,11 @@ export default function DashboardPage() {
       doc.setFontSize(11)
       doc.setFont('helvetica', 'normal')
 
-      if (summary.family.topSpending.length === 0) {
+      if (reportTopSpending.length === 0) {
         doc.text('Sem gastos no periodo.', marginX, y)
         y += 18
       } else {
-        summary.family.topSpending.slice(0, 8).forEach((item, index) => {
+        reportTopSpending.slice(0, 8).forEach((item, index) => {
           ensureRoom()
           doc.text(`${index + 1}. ${item.name}`, marginX, y)
           doc.text(formatCurrency(item.amount), pageWidth - marginX, y, { align: 'right' })
@@ -409,11 +479,11 @@ export default function DashboardPage() {
       doc.setFontSize(11)
       doc.setFont('helvetica', 'normal')
 
-      if (categories.length === 0) {
+      if (reportCategories.length === 0) {
         doc.text('Sem despesas categorizadas no periodo.', marginX, y)
         y += 18
       } else {
-        categories.slice(0, 10).forEach((cat: any, index: number) => {
+        reportCategories.slice(0, 10).forEach((cat: any, index: number) => {
           ensureRoom()
           doc.text(`${index + 1}. ${cat.name}`, marginX, y)
           doc.text(formatCurrency(Number(cat.total || 0)), pageWidth - marginX, y, { align: 'right' })
@@ -429,7 +499,7 @@ export default function DashboardPage() {
       doc.setFontSize(11)
       doc.setFont('helvetica', 'normal')
 
-      evolution.slice(-6).forEach((row: any) => {
+      reportEvolution.forEach((row: any) => {
         ensureRoom()
         doc.text(String(row.month || '-'), marginX, y)
         doc.text(`Entradas ${formatCurrency(Number(row.income || 0))}`, marginX + 130, y)
@@ -533,6 +603,15 @@ export default function DashboardPage() {
             <Rocket size={16} />
             Acesso rapido: Novo lancamento
           </Link>
+          <select
+            value={reportPeriod}
+            onChange={(e) => setReportPeriod(e.target.value as ReportPeriod)}
+            className="rounded-lg border border-cyan-400/35 bg-slate-900/80 text-cyan-100 px-3 py-2 text-sm"
+          >
+            <option value="CURRENT_MONTH">PDF: Mes atual</option>
+            <option value="LAST_3_MONTHS">PDF: Ultimos 3 meses</option>
+            <option value="LAST_12_MONTHS">PDF: Ultimos 12 meses</option>
+          </select>
           <button
             type="button"
             onClick={handleExportPdfReport}
