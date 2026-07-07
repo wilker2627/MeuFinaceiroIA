@@ -342,18 +342,24 @@ export default function DashboardPage() {
     setExportingReport(true)
 
     try {
+      const currentSummary = summary
+      if (!currentSummary) {
+        setReportMessage('Resumo ainda nao carregado. Tente novamente em alguns segundos.')
+        return
+      }
+
       const [{ jsPDF }] = await Promise.all([import('jspdf')])
 
-      let reportPeriodLabel = summary.currentMonth
-      let reportIncome = Number(summary.cashFlow.income || 0)
-      let reportExpenses = Number(summary.cashFlow.expenses || 0)
-      let reportProfit = Number(summary.cashFlow.profit || 0)
-      let reportTopSpending: Array<{ name: string; amount: number }> = summary.family.topSpending
+      let reportPeriodLabel = currentSummary.currentMonth
+      let reportIncome = Number(currentSummary.cashFlow.income || 0)
+      let reportExpenses = Number(currentSummary.cashFlow.expenses || 0)
+      let reportProfit = Number(currentSummary.cashFlow.profit || 0)
+      let reportTopSpending: Array<{ name: string; amount: number }> = currentSummary.family.topSpending
       let reportCategories: Array<{ name: string; total: number }> = categories
       let reportEvolution: Array<{ month: string; income: number; expenses: number }> = evolution
-      let moodLabel = summary.family.mood === 'EXCELLENT'
+      let moodLabel = currentSummary.family.mood === 'EXCELLENT'
         ? 'Excelente'
-        : summary.family.mood === 'ATTENTION'
+        : currentSummary.family.mood === 'ATTENTION'
           ? 'Atencao'
           : 'Cuidado'
 
@@ -443,13 +449,13 @@ export default function DashboardPage() {
       y += 24
       doc.setFontSize(11)
 
-      writeLine('Saldo total atual:', formatCurrency(summary.balance.total))
+      writeLine('Saldo total atual:', formatCurrency(currentSummary.balance.total))
       writeLine('Entradas no periodo:', formatCurrency(reportIncome))
       writeLine('Saidas no periodo:', formatCurrency(reportExpenses))
       writeLine('Resultado no periodo:', formatCurrency(reportProfit))
       writeLine('Humor financeiro:', moodLabel)
-      writeLine('A pagar:', formatCurrency(summary.payable.total))
-      writeLine('A receber:', formatCurrency(summary.receivable.total))
+      writeLine('A pagar:', formatCurrency(currentSummary.payable.total))
+      writeLine('A receber:', formatCurrency(currentSummary.receivable.total))
 
       ensureRoom(48)
       doc.setFontSize(13)
