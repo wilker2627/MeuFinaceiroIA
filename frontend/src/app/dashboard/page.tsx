@@ -650,204 +650,259 @@ export default function DashboardPage() {
   const mood = moodMap[summary.family.mood]
   const panelClass = 'dashboard-panel rounded-2xl border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.45)]'
 
+  // Componente de Card de Estatística Premium
+  const PremiumStatCard = ({ label, value, icon: Icon, color, trend }: any) => {
+    const colorClasses = {
+      green: 'from-emerald-500/20 to-emerald-400/5 border-emerald-500/30 text-emerald-400',
+      blue: 'from-blue-500/20 to-blue-400/5 border-blue-500/30 text-blue-400',
+      red: 'from-red-500/20 to-red-400/5 border-red-500/30 text-red-400',
+      cyan: 'from-cyan-500/20 to-cyan-400/5 border-cyan-500/30 text-cyan-400'
+    }
+    const classes = colorClasses[color as keyof typeof colorClasses] || colorClasses.cyan
+    
+    return (
+      <div className={`bg-gradient-to-br ${classes} border rounded-xl p-4 md:p-6 backdrop-blur transition-all hover:border-opacity-100 duration-300`}>
+        <div className="flex items-start justify-between mb-3">
+          <div className="p-2.5 bg-white/5 rounded-lg">
+            <Icon size={20} className="opacity-80" />
+          </div>
+          {trend && <span className={`text-xs font-semibold px-2 py-1 rounded-full ${trend > 0 ? 'text-emerald-400 bg-emerald-500/20' : 'text-red-400 bg-red-500/20'}`}>{trend > 0 ? '↑' : '↓'} {Math.abs(trend)}%</span>}
+        </div>
+        <p className="text-xs text-white/60 font-medium tracking-wide mb-1">{label}</p>
+        <p className="text-2xl md:text-3xl font-black text-white">
+          <AnimatedCurrency value={value} />
+        </p>
+      </div>
+    )
+  }
+
   return (
-    <div className="relative p-4 md:p-6">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 -left-28 h-96 w-96 rounded-full bg-cyan-500/12 blur-3xl" />
-        <div className="absolute top-1/3 -right-32 h-[28rem] w-[28rem] rounded-full bg-emerald-500/10 blur-3xl" />
+    <div className="relative min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+      {/* Animated Background */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-40 -left-28 h-96 w-96 rounded-full bg-cyan-500/8 blur-3xl animate-pulse" style={{ animationDuration: '8s' }} />
+        <div className="absolute top-1/3 -right-32 h-[28rem] w-[28rem] rounded-full bg-emerald-500/6 blur-3xl animate-pulse" style={{ animationDuration: '10s', animationDelay: '2s' }} />
+        <div className="absolute bottom-0 left-1/2 h-80 w-80 rounded-full bg-blue-500/5 blur-3xl animate-pulse" style={{ animationDuration: '12s', animationDelay: '4s' }} />
       </div>
 
-      <div className="relative max-w-[1300px] mx-auto space-y-6">
-      <div className="rounded-2xl p-6 border border-cyan-500/25 bg-gradient-to-r from-slate-900 via-cyan-950/40 to-slate-900 shadow-[0_18px_50px_rgba(6,182,212,0.15)]">
-        <p className="text-cyan-100/70 text-xs tracking-[0.25em] uppercase">{weekday} • {summary.currentMonth}</p>
-        <h1 className="text-3xl md:text-4xl font-black text-white mt-2 leading-tight">A IA que cuida da saude financeira da sua familia.</h1>
-        <p className="text-slate-300 mt-3 text-sm md:text-base">Saldo disponivel agora: <span className="text-emerald-300 font-bold">{formatCurrency(summary.balance.total)}</span></p>
-        <div className="mt-4 flex flex-col sm:flex-row gap-2">
-          <Link
-            href="/dashboard/transactions"
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-400/35 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 px-4 py-2 text-sm font-semibold"
-          >
-            <Rocket size={16} />
-            Acesso rapido: Novo lancamento
-          </Link>
-          <select
-            value={reportPeriod}
-            onChange={(e) => setReportPeriod(e.target.value as ReportPeriod)}
-            className="rounded-lg border border-cyan-400/35 bg-slate-900/80 text-cyan-100 px-3 py-2 text-sm"
-          >
-            <option value="CURRENT_MONTH">PDF: Mes atual</option>
-            <option value="LAST_3_MONTHS">PDF: Ultimos 3 meses</option>
-            <option value="LAST_12_MONTHS">PDF: Ultimos 12 meses</option>
-          </select>
-          <button
-            type="button"
-            onClick={handleExportPdfReport}
-            disabled={exportingReport}
-            className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-400/35 bg-cyan-500/15 hover:bg-cyan-500/25 disabled:opacity-60 text-cyan-100 px-4 py-2 text-sm font-semibold"
-          >
-            <FileText size={16} />
-            {exportingReport ? 'Gerando PDF...' : 'Gerar relatorio em PDF'}
-          </button>
-        </div>
-        {reportMessage && <p className="text-xs text-slate-300 mt-2">{reportMessage}</p>}
-        <form onSubmit={handleUpdateTotalBalance} className="mt-4 flex flex-col sm:flex-row gap-2 sm:items-center">
-          <input
-            type="text"
-            value={totalBalanceInput}
-            onChange={(e) => setTotalBalanceInput(e.target.value)}
-            placeholder="Ex: 1250,50"
-            className="w-full sm:w-56 bg-slate-800/70 border border-cyan-700/50 text-white rounded-lg px-3 py-2 text-sm"
-          />
-          <button
-            type="submit"
-            disabled={savingTotalBalance}
-            className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-900 font-semibold rounded-lg px-4 py-2 text-sm"
-          >
-            {savingTotalBalance ? 'Salvando...' : 'Ajustar saldo total'}
-          </button>
-          {totalBalanceMessage && (
-            <span className="text-xs text-slate-300">{totalBalanceMessage}</span>
-          )}
-        </form>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className={`lg:col-span-2 p-6 ${panelClass}`}>
-          <div className="flex items-center gap-2 mb-3">
-            <HeartPulse size={18} className="text-emerald-400" />
-            <h2 className="text-lg font-semibold text-white">Saude Financeira da Familia</h2>
-          </div>
-          <div className="space-y-2 text-sm text-gray-300">
-            <p>{summary.family.health.allBillsUpToDate ? 'Todas as contas estao em dia.' : `Existem ${summary.family.health.overdueCount} conta(s) atrasada(s).`}</p>
-            <p>{summary.family.health.dueTodayCount > 0 ? `${summary.family.health.dueTodayCount} conta(s) vencem hoje.` : 'Nenhuma conta vence hoje.'}</p>
-            <p>
-              {summary.family.health.savedVsLastMonth >= 0
-                ? `Vocês economizaram ${formatCurrency(summary.family.health.savedVsLastMonth)} em relacao ao mes passado.`
-                : `Os gastos subiram ${formatCurrency(Math.abs(summary.family.health.savedVsLastMonth))} em relacao ao mes passado.`}
-            </p>
-          </div>
-        </div>
-
-        <div className={`p-6 ${panelClass}`}>
-          <div className="flex items-center gap-2 mb-2">
-            <mood.Icon size={18} className={mood.color} />
-            <h2 className="text-lg font-semibold text-white">Humor Financeiro</h2>
-          </div>
-          <p className={`${mood.color} font-semibold`}>{mood.label}</p>
-          <p className="text-sm text-gray-400 mt-2">{mood.detail}</p>
-        </div>
-      </div>
-
-      <div className="stagger-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          label="Saldo Total"
-          numericValue={summary.balance.total}
-          icon={<DollarSign size={20} />}
-          color="green"
-        />
-        <StatCard
-          label="Entradas do Mês"
-          numericValue={summary.cashFlow.income}
-          icon={<TrendingUp size={20} />}
-          color="blue"
-        />
-        <StatCard
-          label="Saídas do Mês"
-          numericValue={summary.cashFlow.expenses}
-          icon={<TrendingDown size={20} />}
-          color="red"
-        />
-        <StatCard
-          label="Lucro do Mês"
-          numericValue={summary.cashFlow.profit}
-          icon={<TrendingUp size={20} />}
-          color={summary.cashFlow.profit >= 0 ? 'green' : 'red'}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className={`p-6 ${panelClass}`}>
-          <div className="flex items-center gap-2 mb-4">
-            <Target size={18} className="text-blue-400" />
-            <h2 className="text-lg font-semibold text-white">Objetivo da Familia</h2>
-          </div>
-
-          {summary.family.goal ? (
-            <>
-              <p className="text-white font-medium">{summary.family.goal.name}</p>
-              <div className="w-full h-3 bg-gray-800 rounded-full mt-3 overflow-hidden">
-                <div className="h-full bg-blue-500" style={{ width: `${summary.family.goal.progress.toFixed(0)}%` }} />
+      <div className="relative p-4 md:p-8">
+        <div className="max-w-[1400px] mx-auto space-y-6">
+          
+          {/* Hero Section - Redesigned */}
+          <div className="rounded-3xl p-6 md:p-8 border border-cyan-500/20 bg-gradient-to-br from-slate-900/80 via-cyan-950/30 to-slate-900/80 backdrop-blur-xl shadow-[0_20px_60px_rgba(6,182,212,0.1)]">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+              <div className="flex-1">
+                <div className="inline-block mb-3 px-3 py-1 bg-cyan-500/15 border border-cyan-500/30 rounded-full">
+                  <p className="text-cyan-300 text-xs font-semibold tracking-wider uppercase">{weekday} • {summary.currentMonth}</p>
+                </div>
+                <h1 className="text-4xl md:text-5xl font-black text-white mt-3 leading-tight">
+                  Bem-vindo ao seu Financeiro
+                </h1>
+                <p className="text-slate-300 mt-4 text-base">Seu saldo disponível agora é de <span className="text-emerald-300 font-bold text-lg">{formatCurrency(summary.balance.total)}</span></p>
               </div>
-              <p className="text-sm text-gray-400 mt-2">{summary.family.goal.progress.toFixed(0)}% concluido</p>
-              <p className="text-sm text-gray-300 mt-1">Faltam: <span className="text-white font-semibold">{formatCurrency(summary.family.goal.remaining)}</span></p>
-              <p className="text-sm text-gray-400 mt-1">
-                {summary.family.goal.monthsToGoal
-                  ? `Mantendo esse ritmo: conclusao em cerca de ${summary.family.goal.monthsToGoal} mes(es).`
-                  : 'Sem previsao ainda. Foque em aumentar a economia mensal.'}
-              </p>
-            </>
-          ) : (
-            <p className="text-sm text-gray-400">Cadastre uma meta para acompanhar progresso familiar.</p>
-          )}
-        </div>
-
-        <div className={`p-6 ${panelClass}`}>
-          <div className="flex items-center gap-2 mb-4">
-            <PiggyBank size={18} className="text-emerald-400" />
-            <h2 className="text-lg font-semibold text-white">Economia do Mes</h2>
-          </div>
-          <p className="text-gray-300 text-sm">Meta: <span className="font-semibold text-white">{formatCurrency(summary.family.savings.target)}</span></p>
-          <p className="text-gray-300 text-sm mt-1">Economizado: <span className="font-semibold text-emerald-400">{formatCurrency(summary.family.savings.saved)}</span></p>
-          <div className="w-full h-3 bg-gray-800 rounded-full mt-3 overflow-hidden">
-            <div className="h-full bg-emerald-500" style={{ width: `${summary.family.savings.progress.toFixed(0)}%` }} />
-          </div>
-          <p className="text-sm text-gray-400 mt-2">{summary.family.savings.progress.toFixed(0)}% da meta</p>
-        </div>
-      </div>
-
-      {/* Contas por pessoa */}
-      {teamReport && teamReport.members.length > 1 && (
-        <div className={`p-6 ${panelClass}`}>
-          <h2 className="text-lg font-semibold text-white mb-4">👥 Lançamentos por Pessoa</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {teamReport.members.map((m: any) => (
-              <div key={m.userId} className="bg-gray-800 rounded-xl p-4">
-                <div className="text-gray-400 text-sm mb-1">{m.name}</div>
-                <div className="text-green-400 font-semibold">{formatCurrency(m.totalIncome)}</div>
-                <div className="text-red-400 text-sm">{formatCurrency(m.totalExpense)}</div>
+              <div className={`flex items-center justify-center w-32 h-32 rounded-2xl ${mood.color} bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10`}>
+                <div className="text-center">
+                  <mood.Icon size={48} className="mx-auto mb-2" />
+                  <p className="text-sm font-bold">{mood.label}</p>
+                </div>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            </div>
+            
+            {/* Action Bar */}
+            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+              <Link
+                href="/dashboard/transactions"
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-gradient-to-r from-emerald-500/20 to-emerald-400/10 hover:border-emerald-400/60 hover:from-emerald-500/30 transition text-emerald-200 px-4 py-3 text-sm font-semibold"
+              >
+                <Plus size={18} />
+                Novo Lançamento
+              </Link>
+              <button
+                type="button"
+                onClick={handleExportPdfReport}
+                disabled={exportingReport}
+                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/40 bg-gradient-to-r from-cyan-500/20 to-cyan-400/10 hover:border-cyan-400/60 hover:from-cyan-500/30 transition disabled:opacity-50 text-cyan-100 px-4 py-3 text-sm font-semibold"
+              >
+                <FileText size={18} />
+                {exportingReport ? 'Gerando...' : 'Relatório PDF'}
+              </button>
+            </div>
 
-      <div className={`p-6 ${panelClass}`}>
-        <h2 className="text-lg font-semibold text-white mb-4">📈 Evolução Mensal</h2>
-        <ResponsiveContainer width="100%" height={280}>
-          <AreaChart data={evolution}>
-            <defs>
-              <linearGradient id="income" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
-                <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
-              </linearGradient>
-              <linearGradient id="expenses" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
-                <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-            <XAxis dataKey="month" stroke="#6b7280" tick={{ fill: '#9ca3af', fontSize: 12 }} />
-            <YAxis stroke="#6b7280" tick={{ fill: '#9ca3af', fontSize: 12 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-            <Tooltip
-              contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
-              formatter={(v: any) => formatCurrency(v as number)}
+            {/* Secondary Actions */}
+            <div className="mt-4 flex flex-col sm:flex-row gap-3 sm:items-end">
+              <form onSubmit={handleUpdateTotalBalance} className="flex-1 flex gap-2">
+                <input
+                  type="text"
+                  value={totalBalanceInput}
+                  onChange={(e) => setTotalBalanceInput(e.target.value)}
+                  placeholder="Ajustar saldo (ex: 1250,50)"
+                  className="flex-1 bg-slate-800/50 border border-cyan-700/30 text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-400 focus:border-cyan-500/60 focus:outline-none transition"
+                />
+                <button
+                  type="submit"
+                  disabled={savingTotalBalance}
+                  className="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 disabled:opacity-60 text-slate-900 font-semibold rounded-lg px-4 py-2.5 text-sm transition"
+                >
+                  {savingTotalBalance ? '...' : 'Ajustar'}
+                </button>
+              </form>
+              <select
+                value={reportPeriod}
+                onChange={(e) => setReportPeriod(e.target.value as ReportPeriod)}
+                className="bg-slate-800/50 border border-cyan-700/30 text-cyan-100 rounded-lg px-3 py-2.5 text-sm focus:border-cyan-500/60 focus:outline-none transition"
+              >
+                <option value="CURRENT_MONTH">Mês atual</option>
+                <option value="LAST_3_MONTHS">3 últimos meses</option>
+                <option value="LAST_12_MONTHS">12 últimos meses</option>
+              </select>
+            </div>
+            {reportMessage && <p className={`text-xs mt-3 ${reportMessage.includes('sucesso') ? 'text-emerald-400' : 'text-red-400'}`}>{reportMessage}</p>}
+            {totalBalanceMessage && <p className={`text-xs mt-2 ${totalBalanceMessage.includes('sucesso') ? 'text-emerald-400' : 'text-red-400'}`}>{totalBalanceMessage}</p>}
+          </div>
+
+          {/* Key Metrics - Premium Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <PremiumStatCard
+              label="Saldo Total"
+              value={summary.balance.total}
+              icon={DollarSign}
+              color="green"
             />
-            <Legend wrapperStyle={{ color: '#9ca3af' }} />
-            <Area type="monotone" dataKey="income" name="Entradas" stroke="#22c55e" fill="url(#income)" strokeWidth={2} />
-            <Area type="monotone" dataKey="expenses" name="Saídas" stroke="#ef4444" fill="url(#expenses)" strokeWidth={2} />
-            <Area type="monotone" dataKey="profit" name="Lucro" stroke="#3b82f6" fill="none" strokeWidth={2} strokeDasharray="5 5" />
-          </AreaChart>
-        </ResponsiveContainer>
+            <PremiumStatCard
+              label="Entradas do Mês"
+              value={summary.cashFlow.income}
+              icon={TrendingUp}
+              color="blue"
+            />
+            <PremiumStatCard
+              label="Saídas do Mês"
+              value={summary.cashFlow.expenses}
+              icon={TrendingDown}
+              color="red"
+            />
+            <PremiumStatCard
+              label="Resultado do Mês"
+              value={summary.cashFlow.profit}
+              icon={summary.cashFlow.profit >= 0 ? TrendingUp : TrendingDown}
+              color={summary.cashFlow.profit >= 0 ? 'green' : 'red'}
+            />
+          </div>
+
+          {/* Health & Goal Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className={`lg:col-span-1 p-6 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-slate-900 backdrop-blur`}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-emerald-500/20 rounded-lg">
+                  <HeartPulse size={18} className="text-emerald-400" />
+                </div>
+                <h2 className="text-sm font-bold text-white">Saúde Financeira</h2>
+              </div>
+              <div className="space-y-2 text-xs text-slate-300">
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${summary.family.health.allBillsUpToDate ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                  {summary.family.health.allBillsUpToDate ? 'Contas em dia' : `${summary.family.health.overdueCount} atrasadas`}
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${summary.family.health.dueTodayCount === 0 ? 'bg-emerald-400' : 'bg-yellow-400'}`} />
+                  {summary.family.health.dueTodayCount > 0 ? `${summary.family.health.dueTodayCount} vencem hoje` : 'Nada vence hoje'}
+                </div>
+              </div>
+            </div>
+
+            <div className={`lg:col-span-1 p-6 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-slate-900 backdrop-blur`}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-blue-500/20 rounded-lg">
+                  <Target size={18} className="text-blue-400" />
+                </div>
+                <h2 className="text-sm font-bold text-white">Objetivo</h2>
+              </div>
+              {summary.family.goal ? (
+                <div className="space-y-2">
+                  <p className="text-white font-semibold text-sm">{summary.family.goal.name}</p>
+                  <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400" style={{ width: `${Math.min(summary.family.goal.progress, 100).toFixed(0)}%` }} />
+                  </div>
+                  <p className="text-xs text-slate-400">{summary.family.goal.progress.toFixed(0)}% • Faltam {formatCurrency(summary.family.goal.remaining)}</p>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400">Crie uma meta para acompanhar</p>
+              )}
+            </div>
+
+            <div className={`lg:col-span-1 p-6 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-slate-900 backdrop-blur`}>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 bg-emerald-500/20 rounded-lg">
+                  <PiggyBank size={18} className="text-emerald-400" />
+                </div>
+                <h2 className="text-sm font-bold text-white">Poupança</h2>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-xs text-slate-400">Economizado</span>
+                  <span className="text-sm font-bold text-emerald-400">{formatCurrency(summary.family.savings.saved)}</span>
+                </div>
+                <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400" style={{ width: `${Math.min(summary.family.savings.progress, 100).toFixed(0)}%` }} />
+                </div>
+                <p className="text-xs text-slate-400">Meta: {formatCurrency(summary.family.savings.target)}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Charts Section */}
+          <div className={`p-6 rounded-2xl border border-cyan-500/20 bg-slate-900/50 backdrop-blur`}>
+            <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+              <div className="w-1 h-6 bg-gradient-to-b from-cyan-500 to-cyan-600 rounded-full" />
+              Evolução Mensal
+            </h2>
+            <ResponsiveContainer width="100%" height={320}>
+              <AreaChart data={evolution}>
+                <defs>
+                  <linearGradient id="income" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="expenses" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f87171" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#f87171" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                <XAxis dataKey="month" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                <YAxis stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px' }}
+                  formatter={(v: any) => formatCurrency(v as number)}
+                />
+                <Legend wrapperStyle={{ color: '#cbd5e1' }} />
+                <Area type="monotone" dataKey="income" name="Entradas" stroke="#10b981" fill="url(#income)" strokeWidth={2} />
+                <Area type="monotone" dataKey="expenses" name="Saídas" stroke="#f87171" fill="url(#expenses)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Team Section */}
+          {teamReport && teamReport.members.length > 1 && (
+            <div className={`p-6 rounded-2xl border border-cyan-500/20 bg-slate-900/50 backdrop-blur`}>
+              <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
+                <div className="w-1 h-6 bg-gradient-to-b from-cyan-500 to-cyan-600 rounded-full" />
+                Lançamentos por Pessoa
+              </h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {teamReport.members.map((m: any) => (
+                  <div key={m.userId} className="bg-gradient-to-br from-slate-800/50 to-slate-900 rounded-xl p-4 border border-cyan-500/10">
+                    <div className="text-slate-400 text-xs font-semibold mb-2">{m.name}</div>
+                    <div className="text-emerald-400 font-bold text-sm">{formatCurrency(m.totalIncome)}</div>
+                    <div className="text-red-400 text-xs">{formatCurrency(m.totalExpense)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+        </div>
+      </div>
+    </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
