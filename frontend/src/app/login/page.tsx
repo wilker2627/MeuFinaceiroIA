@@ -48,7 +48,21 @@ export default function LoginPage() {
       addToast('Bem-vindo! Entrando em seu dashboard...', 'success', 2000)
     } catch (err: any) {
       if (err.response?.status === 401) {
-        addToast('E-mail ou senha inválidos. Verifique seus dados.', 'error')
+        try {
+          const { data } = await api.post('/admin/login', {
+            email: String(email || '').trim().toLowerCase(),
+            password
+          })
+
+          localStorage.setItem('admin_token', data.token)
+          localStorage.setItem('admin_profile', JSON.stringify(data.admin))
+          sessionStorage.removeItem(LOGIN_DRAFT_KEY)
+          addToast('Login admin detectado. Redirecionando para o painel administrativo...', 'info', 1800)
+          window.location.href = '/admin/dashboard'
+          return
+        } catch {
+          addToast('E-mail ou senha inválidos. Verifique seus dados.', 'error')
+        }
       } else {
         addToast(err.response?.data?.error || 'Erro ao fazer login.', 'error')
       }
