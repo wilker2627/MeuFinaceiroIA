@@ -2,91 +2,145 @@
 
 import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useToast } from '@/contexts/ToastContext'
 import Link from 'next/link'
-import Image from 'next/image'
+import { Mail, Lock, User, Loader, Eye, EyeOff } from 'lucide-react'
 
 export default function RegisterPage() {
   const { register } = useAuth()
+  const { addToast } = useToast()
   const [form, setForm] = useState({ name: '', email: '', password: '' })
-  const [error, setError] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setError('')
-    if (form.password.length < 8) { setError('Senha deve ter no mínimo 8 caracteres.'); return }
+    
+    if (!form.name) {
+      addToast('Informe o nome da sua família ou empresa.', 'warning')
+      return
+    }
+    
+    if (form.password.length < 8) {
+      addToast('Senha deve ter no mínimo 8 caracteres.', 'warning')
+      return
+    }
+
     setLoading(true)
     try {
       await register(form.name, form.email, form.password)
+      addToast('Conta criada com sucesso! Bem-vindo.', 'success', 2000)
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Erro ao criar conta.')
+      addToast(err.response?.data?.error || 'Erro ao criar conta.', 'error')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950 px-4">
-      <div className="w-full max-w-lg">
-        <div className="text-center mb-9">
-          <div className="flex justify-center mb-4">
-            <Image src="/financeiroai-logo.svg" alt="FinanceiroAI" width={124} height={124} className="rounded-[2rem] shadow-[0_18px_48px_rgba(34,211,238,0.32)]" />
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950 to-slate-950 flex items-center justify-center px-4 py-8">
+      {/* Background Effects */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 left-1/2 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 left-1/4 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl" />
+      </div>
+
+      <div className="w-full max-w-md relative z-10">
+        {/* Logo & Title */}
+        <div className="text-center mb-8">
+          <div className="inline-block p-4 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 rounded-2xl mb-4">
+            <span className="text-4xl font-black text-cyan-400">MF</span>
           </div>
-          <h1 className="text-5xl md:text-6xl font-black tracking-tight text-cyan-300">FinanceiroAI</h1>
-          <p className="text-gray-400 mt-2">Crie sua conta ou assine um plano completo</p>
+          <h1 className="text-4xl font-black text-white">MeuFinanceiro</h1>
+          <p className="text-slate-400 mt-2 text-sm">Comece a controlar suas finanças</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="bg-gray-900 rounded-2xl p-8 shadow-xl border border-gray-800">
-          <h2 className="text-xl font-semibold text-white mb-6">Criar conta</h2>
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="bg-gradient-to-br from-slate-900/80 to-slate-950 border border-cyan-500/20 rounded-2xl p-8 backdrop-blur-xl shadow-2xl space-y-4">
+          <h2 className="text-xl font-bold text-white mb-6">Criar uma conta</h2>
 
-          {error && (
-            <div className="bg-red-900/40 border border-red-500 text-red-300 rounded-lg p-3 mb-4 text-sm">{error}</div>
-          )}
-
-          {[
-            { key: 'name', label: 'Nome da empresa / família', type: 'text', placeholder: 'Ex: Ótica Ideale ou Família Matos' },
-            { key: 'email', label: 'E-mail', type: 'email', placeholder: 'seu@email.com' },
-            { key: 'password', label: 'Senha (mínimo 8 caracteres)', type: 'password', placeholder: '••••••••' },
-          ].map(field => (
-            <div key={field.key} className="mb-4">
-              <label className="block text-gray-400 text-sm mb-2">{field.label}</label>
+          {/* Name Field */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Nome da família / empresa</label>
+            <div className="relative">
+              <User className="absolute left-3 top-3.5 text-slate-500" size={18} />
               <input
-                type={field.type}
-                value={form[field.key as keyof typeof form]}
-                onChange={e => setForm(prev => ({ ...prev, [field.key]: e.target.value }))}
+                type="text"
+                value={form.name}
+                onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
                 required
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-4 py-3 focus:outline-none focus:border-green-500"
-                placeholder={field.placeholder}
+                className="w-full bg-slate-800/50 border border-cyan-700/30 text-white rounded-lg px-10 py-3 placeholder-slate-500 focus:border-cyan-500/60 focus:outline-none transition"
+                placeholder="Ex: Família Silva"
               />
             </div>
-          ))}
-
-          <div className="bg-gray-800 rounded-lg p-3 mb-6 text-xs text-gray-400">
-            ✅ Plano gratuito inclui:<br />
-            • 2 usuários WhatsApp<br />
-            • 100 lançamentos/mês<br />
-            • Dashboard completo
           </div>
 
+          {/* E-mail Field */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">E-mail</label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-3.5 text-slate-500" size={18} />
+              <input
+                type="email"
+                value={form.email}
+                onChange={e => setForm(prev => ({ ...prev, email: e.target.value }))}
+                required
+                className="w-full bg-slate-800/50 border border-cyan-700/30 text-white rounded-lg px-10 py-3 placeholder-slate-500 focus:border-cyan-500/60 focus:outline-none transition"
+                placeholder="seu@email.com"
+              />
+            </div>
+          </div>
+
+          {/* Password Field */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Senha (mínimo 8 caracteres)</label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-3.5 text-slate-500" size={18} />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={form.password}
+                onChange={e => setForm(prev => ({ ...prev, password: e.target.value }))}
+                required
+                className="w-full bg-slate-800/50 border border-cyan-700/30 text-white rounded-lg px-10 py-3 placeholder-slate-500 focus:border-cyan-500/60 focus:outline-none transition"
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3.5 text-slate-500 hover:text-slate-400 transition"
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Info Box */}
+          <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-3 text-xs text-cyan-300">
+            ✓ Plano gratuito inclui: Dashboard completo, PDF de relatórios, metas financeiras
+          </div>
+
+          {/* Submit Button */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-green-500 hover:bg-green-400 disabled:opacity-50 text-black font-semibold py-3 rounded-lg transition-colors"
+            className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-60 text-white font-semibold py-3 rounded-lg transition flex items-center justify-center gap-2 mt-6"
           >
+            {loading && <Loader size={18} className="animate-spin" />}
             {loading ? 'Criando...' : 'Criar conta grátis'}
           </button>
-
-          <p className="text-center text-gray-500 text-sm mt-4">
-            Já tem conta?{' '}
-            <Link href="/login" className="text-green-400 hover:text-green-300">Entrar</Link>
-          </p>
-
-          <p className="text-center text-gray-600 text-xs mt-3">
-            Quer escolher plano e pagar online?{' '}
-            <Link href="/subscribe" className="text-cyan-400 hover:text-cyan-300">Ir para assinatura self-service</Link>
-          </p>
         </form>
+
+        {/* Footer Links */}
+        <div className="mt-6 text-center space-y-3">
+          <p className="text-slate-400 text-sm">
+            Já tem conta?{' '}
+            <Link href="/login" className="text-cyan-400 hover:text-cyan-300 font-semibold transition">
+              Entrar
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   )
 }
+
