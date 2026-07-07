@@ -1,0 +1,1076 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import api from '@/lib/api'
+import { formatCurrency } from '@/lib/utils'
+import { useAnimatedNumber } from '@/lib/useAnimatedNumber'
+import AnimatedCurrency from '@/components/AnimatedCurrency'
+import { useAuth } from '@/contexts/AuthContext'
+import {
+  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+} from 'recharts'
+import { TrendingUp, TrendingDown, DollarSign, Target, CalendarClock, HeartPulse, PiggyBank, Smile, Meh, Frown, Plus, Trash2, CreditCard, Wallet, QrCode } from 'lucide-react'
+
+interface Goal {
+  id: string
+  name: string
+  targetAmount: number
+  currentAmount: number
+  deadline?: string
+}
+
+interface PurchaseSimulation {
+  canAfford: boolean
+  description: string
+  amount: number
+  currentMonthlySavings: number
+  projectedMonthlySavings: number
+  goalDelayMonths: number | null
+  message: string
+}
+
+interface NotificationSettings {
+  timezone: string
+  remindersEnabled: boolean
+  remindersHour: number
+  dailyDigestEnabled: boolean
+  dailyDigestHour: number
+  weeklyDigestEnabled: boolean
+  weeklyDigestWeekday: number
+  weeklyDigestHour: number
+  cashflowAlertEnabled: boolean
+  lastRemindersSentAt?: string | null
+  lastDailyDigestSentAt?: string | null
+  lastWeeklyDigestSentAt?: string | null
+}
+
+interface SystemHealth {
+  status: 'ok' | 'degraded'
+  checkedAt: string
+  server: {
+    env: string
+    uptimeSec: number
+    memory: { rss: number; heapUsed: number; heapTotal: number }
+    nodeVersion: string
+  }
+  database: {
+    status: 'ok' | 'error'
+    error?: string
+  }
+  openai: {
+    configured: boolean
+    mode: string
+  }
+  whatsapp: {
+    enabled: boolean
+    runtime: {
+      activeCount: number
+      connectedCount: number
+      qrPendingCount: number
+    }
+    tenantSessions: Array<{
+      id: string
+      phoneNumber: string
+      isActive: boolean
+      connectedAt?: string | null
+    }>
+    repairAudit: Array<{
+      at: string
+      sessionId: string
+      phoneNumber: string
+      outcome: 'STARTED' | 'SUCCESS' | 'FAILED'
+      error?: string
+      actor?: { id: string; email: string; plan: string } | null
+    }>
+    repairLimit: {
+      used: number
+      remaining: number
+      limit: number
+      periodStart: string
+    }
+  }
+}
+
+interface Summary {
+  currentMonth: string
+  balance: { accounts: any[]; total: number }
+  cashFlow: { income: number; expenses: number; profit: number }
+  payable: { items: any[]; total: number }
+  receivable: { items: any[]; total: number }
+  family: {
+    mood: 'EXCELLENT' | 'ATTENTION' | 'CAREFUL'
+    health: {
+      allBillsUpToDate: boolean
+      overdueCount: number
+      dueTodayCount: number
+      savedVsLastMonth: number
+    }
+    goal: {
+      id: string
+      name: string
+      targetAmount: number
+      currentAmount: number
+      remaining: number
+      progress: number
+      monthsToGoal: number | null
+      deadline?: string
+    } | null
+    savings: {
+      target: number
+      saved: number
+      progress: number
+    }
+    topSpending: Array<{ name: string; amount: number }>
+    dailyDigest: {
+      totalSpentToday: number
+      transactions: Array<{ id: string; description: string; amount: number; category: string; paymentMethod?: 'PIX' | 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' }>
+    }
+  }
+}
+
+const PAYMENT_METHOD_META: Record<string, { label: string; icon: any; className: string }> = {
+  PIX: { label: 'PIX', icon: QrCode, className: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
+  CASH: { label: 'Dinheiro', icon: Wallet, className: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
+  CREDIT_CARD: { label: 'Cartao credito', icon: CreditCard, className: 'text-violet-300 border-violet-500/30 bg-violet-500/10' },
+  DEBIT_CARD: { label: 'Cartao debito', icon: CreditCard, className: 'text-amber-300 border-amber-500/30 bg-amber-500/10' },
+}
+
+const getPaymentMethodMeta = (method?: string) => PAYMENT_METHOD_META[method || 'CASH'] || PAYMENT_METHOD_META.CASH
+
+const COLORS = ['#22c55e','#3b82f6','#f97316','#a855f7','#ec4899','#eab308','#14b8a6','#ef4444']
+
+export default function DashboardPage() {
+  const { logout } = useAuth()
+  const [summary, setSummary] = useState<Summary | null>(null)
+  const [evolution, setEvolution] = useState<any[]>([])
+  const [categories, setCategories] = useState<any[]>([])
+  const [teamReport, setTeamReport] = useState<any>(null)
+  const [goals, setGoals] = useState<Goal[]>([])
+  const [goalForm, setGoalForm] = useState({ name: '', targetAmount: '', currentAmount: '' })
+  const [simAmount, setSimAmount] = useState('')
+  const [simResult, setSimResult] = useState<PurchaseSimulation | null>(null)
+  const [settings, setSettings] = useState<NotificationSettings | null>(null)
+  const [savingSettings, setSavingSettings] = useState(false)
+  const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null)
+  const [repairingSessionId, setRepairingSessionId] = useState<string | null>(null)
+  const [repairQr, setRepairQr] = useState<string | null>(null)
+  const [diagnosticError, setDiagnosticError] = useState<string | null>(null)
+  const [accountForm, setAccountForm] = useState({ currentPassword: '', newPassword: '', confirmNewPassword: '' })
+  const [accountMessage, setAccountMessage] = useState('')
+  const [savingAccount, setSavingAccount] = useState(false)
+  const [totalBalanceInput, setTotalBalanceInput] = useState('')
+  const [savingTotalBalance, setSavingTotalBalance] = useState(false)
+  const [totalBalanceMessage, setTotalBalanceMessage] = useState('')
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  function parseCurrencyInput(value: string) {
+    const cleaned = String(value || '').replace(/\s/g, '').replace(/R\$/gi, '')
+    if (!cleaned) return NaN
+
+    const hasComma = cleaned.includes(',')
+    if (hasComma) {
+      const normalized = cleaned.replace(/\./g, '').replace(',', '.')
+      return Number(normalized)
+    }
+
+    return Number(cleaned)
+  }
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [s, e, c, t, g, ns] = await Promise.all([
+          api.get('/dashboard/summary'),
+          api.get('/dashboard/evolution?months=6'),
+          api.get('/dashboard/categories'),
+          api.get('/users/team-report'),
+          api.get('/dashboard/goals'),
+          api.get('/dashboard/notification-settings'),
+        ])
+        setSummary(s.data)
+        setTotalBalanceInput(String(Number(s.data?.balance?.total || 0).toFixed(2)).replace('.', ','))
+        setEvolution(e.data)
+        setCategories(c.data)
+        setTeamReport(t.data)
+        setGoals(g.data)
+        setSettings(ns.data)
+        await loadDiagnostics()
+      } catch {}
+      setLoading(false)
+    }
+    load()
+  }, [])
+
+  async function reloadSummary() {
+    const { data } = await api.get('/dashboard/summary')
+    setSummary(data)
+    setTotalBalanceInput(String(Number(data?.balance?.total || 0).toFixed(2)).replace('.', ','))
+  }
+
+  async function loadDiagnostics() {
+    try {
+      const { data } = await api.get('/dashboard/system/health')
+      setSystemHealth(data)
+      setDiagnosticError(null)
+    } catch (error: any) {
+      setDiagnosticError(error?.response?.data?.error || 'Nao foi possivel carregar diagnostico.')
+    }
+  }
+
+  async function reloadGoals() {
+    const { data } = await api.get('/dashboard/goals')
+    setGoals(data)
+  }
+
+  async function handleAddGoal(e: React.FormEvent) {
+    e.preventDefault()
+    if (!goalForm.name || !goalForm.targetAmount) return
+
+    await api.post('/dashboard/goals', {
+      name: goalForm.name,
+      targetAmount: Number(goalForm.targetAmount),
+      currentAmount: Number(goalForm.currentAmount || 0)
+    })
+
+    setGoalForm({ name: '', targetAmount: '', currentAmount: '' })
+    await reloadGoals()
+  }
+
+  async function handleUpdateGoalProgress(goalId: string, value: number) {
+    await api.patch(`/dashboard/goals/${goalId}`, { currentAmount: value })
+    await reloadGoals()
+  }
+
+  async function handleDeleteGoal(goalId: string) {
+    await api.delete(`/dashboard/goals/${goalId}`)
+    await reloadGoals()
+  }
+
+  async function handleSimulatePurchase(e: React.FormEvent) {
+    e.preventDefault()
+    if (!simAmount) return
+    const { data } = await api.post('/dashboard/simulate-purchase', {
+      amount: Number(simAmount),
+      description: 'Simulacao no dashboard'
+    })
+    setSimResult(data)
+  }
+
+  async function handleSaveSettings(e: React.FormEvent) {
+    e.preventDefault()
+    if (!settings) return
+    setSavingSettings(true)
+    try {
+      const { data } = await api.put('/dashboard/notification-settings', settings)
+      setSettings(data)
+    } finally {
+      setSavingSettings(false)
+    }
+  }
+
+  async function handleUpdateTotalBalance(e: React.FormEvent) {
+    e.preventDefault()
+    setTotalBalanceMessage('')
+
+    const parsed = parseCurrencyInput(totalBalanceInput)
+    if (!Number.isFinite(parsed)) {
+      setTotalBalanceMessage('Informe um valor valido. Exemplo: 1250,50')
+      return
+    }
+
+    setSavingTotalBalance(true)
+    try {
+      await api.patch('/dashboard/accounts/total-balance', { totalBalance: parsed })
+      await reloadSummary()
+      setTotalBalanceMessage('Saldo total atualizado com sucesso.')
+    } catch (error: any) {
+      setTotalBalanceMessage(error?.response?.data?.error || 'Nao foi possivel atualizar o saldo total.')
+    } finally {
+      setSavingTotalBalance(false)
+    }
+  }
+
+  async function handleRepairSession(sessionId: string) {
+    const acceptedStep1 = window.confirm('Essa acao vai resetar credenciais locais da sessao e gerar novo QR. Deseja continuar?')
+    if (!acceptedStep1) return
+
+    const confirmation = window.prompt('Digite REPARAR para confirmar:')
+    if (confirmation !== 'REPARAR') {
+      setDiagnosticError('Confirmacao invalida. Reparo cancelado.')
+      return
+    }
+
+    setRepairingSessionId(sessionId)
+    setRepairQr(null)
+    try {
+      const { data } = await api.post(`/whatsapp/sessions/${sessionId}/repair`)
+      setRepairQr(data.qrCode || null)
+      await loadDiagnostics()
+    } catch (error: any) {
+      setDiagnosticError(error?.response?.data?.error || 'Falha ao reparar sessao WhatsApp.')
+    } finally {
+      setRepairingSessionId(null)
+    }
+  }
+
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault()
+    setAccountMessage('')
+
+    if (!accountForm.currentPassword || !accountForm.newPassword) {
+      setAccountMessage('Preencha senha atual e nova senha.')
+      return
+    }
+
+    if (accountForm.newPassword.length < 8) {
+      setAccountMessage('A nova senha deve ter no minimo 8 caracteres.')
+      return
+    }
+
+    const hasUpper = /[A-Z]/.test(accountForm.newPassword)
+    const hasLower = /[a-z]/.test(accountForm.newPassword)
+    const hasNumber = /\d/.test(accountForm.newPassword)
+    const hasSymbol = /[^A-Za-z0-9]/.test(accountForm.newPassword)
+
+    if (!hasUpper || !hasLower || !hasNumber || !hasSymbol) {
+      setAccountMessage('Use senha forte: maiuscula, minuscula, numero e simbolo.')
+      return
+    }
+
+    if (accountForm.newPassword !== accountForm.confirmNewPassword) {
+      setAccountMessage('A confirmacao da nova senha nao confere.')
+      return
+    }
+
+    setSavingAccount(true)
+    try {
+      await api.patch('/tenants/me', {
+        currentPassword: accountForm.currentPassword,
+        newPassword: accountForm.newPassword
+      })
+
+      setAccountForm({ currentPassword: '', newPassword: '', confirmNewPassword: '' })
+      setAccountMessage('Senha alterada com sucesso. Voce sera redirecionado para login.')
+      setTimeout(() => {
+        logout()
+      }, 1200)
+    } catch (error: any) {
+      setAccountMessage(error?.response?.data?.error || 'Nao foi possivel alterar a senha.')
+    } finally {
+      setSavingAccount(false)
+    }
+  }
+
+  if (loading) return (
+    <div className="flex items-center justify-center h-full">
+      <p className="text-gray-400">Carregando dashboard...</p>
+    </div>
+  )
+
+  if (!summary) return null
+
+  const now = new Date()
+  const weekday = now.toLocaleDateString('pt-BR', { weekday: 'long' })
+  const moodMap = {
+    EXCELLENT: { label: 'Excelente', Icon: Smile, color: 'text-emerald-400', detail: 'Vocês estão no caminho certo.' },
+    ATTENTION: { label: 'Atenção', Icon: Meh, color: 'text-amber-400', detail: 'Vale atenção em alguns gastos.' },
+    CAREFUL: { label: 'Cuidado', Icon: Frown, color: 'text-rose-400', detail: 'Despesas acima do ideal.' }
+  }
+  const mood = moodMap[summary.family.mood]
+  const panelClass = 'dashboard-panel rounded-2xl border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.45)]'
+
+  return (
+    <div className="relative p-4 md:p-6">
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -top-40 -left-28 h-96 w-96 rounded-full bg-cyan-500/12 blur-3xl" />
+        <div className="absolute top-1/3 -right-32 h-[28rem] w-[28rem] rounded-full bg-emerald-500/10 blur-3xl" />
+      </div>
+
+      <div className="relative max-w-[1300px] mx-auto space-y-6">
+      <div className="rounded-2xl p-6 border border-cyan-500/25 bg-gradient-to-r from-slate-900 via-cyan-950/40 to-slate-900 shadow-[0_18px_50px_rgba(6,182,212,0.15)]">
+        <p className="text-cyan-100/70 text-xs tracking-[0.25em] uppercase">{weekday} • {summary.currentMonth}</p>
+        <h1 className="text-3xl md:text-4xl font-black text-white mt-2 leading-tight">A IA que cuida da saude financeira da sua familia.</h1>
+        <p className="text-slate-300 mt-3 text-sm md:text-base">Saldo disponivel agora: <span className="text-emerald-300 font-bold">{formatCurrency(summary.balance.total)}</span></p>
+        <form onSubmit={handleUpdateTotalBalance} className="mt-4 flex flex-col sm:flex-row gap-2 sm:items-center">
+          <input
+            type="text"
+            value={totalBalanceInput}
+            onChange={(e) => setTotalBalanceInput(e.target.value)}
+            placeholder="Ex: 1250,50"
+            className="w-full sm:w-56 bg-slate-800/70 border border-cyan-700/50 text-white rounded-lg px-3 py-2 text-sm"
+          />
+          <button
+            type="submit"
+            disabled={savingTotalBalance}
+            className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-slate-900 font-semibold rounded-lg px-4 py-2 text-sm"
+          >
+            {savingTotalBalance ? 'Salvando...' : 'Ajustar saldo total'}
+          </button>
+          {totalBalanceMessage && (
+            <span className="text-xs text-slate-300">{totalBalanceMessage}</span>
+          )}
+        </form>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className={`lg:col-span-2 p-6 ${panelClass}`}>
+          <div className="flex items-center gap-2 mb-3">
+            <HeartPulse size={18} className="text-emerald-400" />
+            <h2 className="text-lg font-semibold text-white">Saude Financeira da Familia</h2>
+          </div>
+          <div className="space-y-2 text-sm text-gray-300">
+            <p>{summary.family.health.allBillsUpToDate ? 'Todas as contas estao em dia.' : `Existem ${summary.family.health.overdueCount} conta(s) atrasada(s).`}</p>
+            <p>{summary.family.health.dueTodayCount > 0 ? `${summary.family.health.dueTodayCount} conta(s) vencem hoje.` : 'Nenhuma conta vence hoje.'}</p>
+            <p>
+              {summary.family.health.savedVsLastMonth >= 0
+                ? `Vocês economizaram ${formatCurrency(summary.family.health.savedVsLastMonth)} em relacao ao mes passado.`
+                : `Os gastos subiram ${formatCurrency(Math.abs(summary.family.health.savedVsLastMonth))} em relacao ao mes passado.`}
+            </p>
+          </div>
+        </div>
+
+        <div className={`p-6 ${panelClass}`}>
+          <div className="flex items-center gap-2 mb-2">
+            <mood.Icon size={18} className={mood.color} />
+            <h2 className="text-lg font-semibold text-white">Humor Financeiro</h2>
+          </div>
+          <p className={`${mood.color} font-semibold`}>{mood.label}</p>
+          <p className="text-sm text-gray-400 mt-2">{mood.detail}</p>
+        </div>
+      </div>
+
+      <div className="stagger-grid grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Saldo Total"
+          numericValue={summary.balance.total}
+          icon={<DollarSign size={20} />}
+          color="green"
+        />
+        <StatCard
+          label="Entradas do Mês"
+          numericValue={summary.cashFlow.income}
+          icon={<TrendingUp size={20} />}
+          color="blue"
+        />
+        <StatCard
+          label="Saídas do Mês"
+          numericValue={summary.cashFlow.expenses}
+          icon={<TrendingDown size={20} />}
+          color="red"
+        />
+        <StatCard
+          label="Lucro do Mês"
+          numericValue={summary.cashFlow.profit}
+          icon={<TrendingUp size={20} />}
+          color={summary.cashFlow.profit >= 0 ? 'green' : 'red'}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className={`p-6 ${panelClass}`}>
+          <div className="flex items-center gap-2 mb-4">
+            <Target size={18} className="text-blue-400" />
+            <h2 className="text-lg font-semibold text-white">Objetivo da Familia</h2>
+          </div>
+
+          {summary.family.goal ? (
+            <>
+              <p className="text-white font-medium">{summary.family.goal.name}</p>
+              <div className="w-full h-3 bg-gray-800 rounded-full mt-3 overflow-hidden">
+                <div className="h-full bg-blue-500" style={{ width: `${summary.family.goal.progress.toFixed(0)}%` }} />
+              </div>
+              <p className="text-sm text-gray-400 mt-2">{summary.family.goal.progress.toFixed(0)}% concluido</p>
+              <p className="text-sm text-gray-300 mt-1">Faltam: <span className="text-white font-semibold">{formatCurrency(summary.family.goal.remaining)}</span></p>
+              <p className="text-sm text-gray-400 mt-1">
+                {summary.family.goal.monthsToGoal
+                  ? `Mantendo esse ritmo: conclusao em cerca de ${summary.family.goal.monthsToGoal} mes(es).`
+                  : 'Sem previsao ainda. Foque em aumentar a economia mensal.'}
+              </p>
+            </>
+          ) : (
+            <p className="text-sm text-gray-400">Cadastre uma meta para acompanhar progresso familiar.</p>
+          )}
+        </div>
+
+        <div className={`p-6 ${panelClass}`}>
+          <div className="flex items-center gap-2 mb-4">
+            <PiggyBank size={18} className="text-emerald-400" />
+            <h2 className="text-lg font-semibold text-white">Economia do Mes</h2>
+          </div>
+          <p className="text-gray-300 text-sm">Meta: <span className="font-semibold text-white">{formatCurrency(summary.family.savings.target)}</span></p>
+          <p className="text-gray-300 text-sm mt-1">Economizado: <span className="font-semibold text-emerald-400">{formatCurrency(summary.family.savings.saved)}</span></p>
+          <div className="w-full h-3 bg-gray-800 rounded-full mt-3 overflow-hidden">
+            <div className="h-full bg-emerald-500" style={{ width: `${summary.family.savings.progress.toFixed(0)}%` }} />
+          </div>
+          <p className="text-sm text-gray-400 mt-2">{summary.family.savings.progress.toFixed(0)}% da meta</p>
+        </div>
+      </div>
+
+      {/* Contas por pessoa */}
+      {teamReport && teamReport.members.length > 1 && (
+        <div className={`p-6 ${panelClass}`}>
+          <h2 className="text-lg font-semibold text-white mb-4">👥 Lançamentos por Pessoa</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {teamReport.members.map((m: any) => (
+              <div key={m.userId} className="bg-gray-800 rounded-xl p-4">
+                <div className="text-gray-400 text-sm mb-1">{m.name}</div>
+                <div className="text-green-400 font-semibold">{formatCurrency(m.totalIncome)}</div>
+                <div className="text-red-400 text-sm">{formatCurrency(m.totalExpense)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className={`p-6 ${panelClass}`}>
+        <h2 className="text-lg font-semibold text-white mb-4">📈 Evolução Mensal</h2>
+        <ResponsiveContainer width="100%" height={280}>
+          <AreaChart data={evolution}>
+            <defs>
+              <linearGradient id="income" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3}/>
+                <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+              </linearGradient>
+              <linearGradient id="expenses" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
+                <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+            <XAxis dataKey="month" stroke="#6b7280" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+            <YAxis stroke="#6b7280" tick={{ fill: '#9ca3af', fontSize: 12 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
+            <Tooltip
+              contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+              formatter={(v: any) => formatCurrency(v as number)}
+            />
+            <Legend wrapperStyle={{ color: '#9ca3af' }} />
+            <Area type="monotone" dataKey="income" name="Entradas" stroke="#22c55e" fill="url(#income)" strokeWidth={2} />
+            <Area type="monotone" dataKey="expenses" name="Saídas" stroke="#ef4444" fill="url(#expenses)" strokeWidth={2} />
+            <Area type="monotone" dataKey="profit" name="Lucro" stroke="#3b82f6" fill="none" strokeWidth={2} strokeDasharray="5 5" />
+          </AreaChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className={`p-6 ${panelClass}`}>
+          <h2 className="text-lg font-semibold text-white mb-4">🥧 Gastos do Mes</h2>
+          {categories.length > 0 ? (
+            <ResponsiveContainer width="100%" height={260}>
+              <PieChart>
+                <Pie data={categories} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="total" nameKey="name" label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false}>
+                  {categories.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }} formatter={(v: any) => formatCurrency(v as number)} />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-gray-500 text-center py-16">Nenhuma despesa este mês</p>
+          )}
+        </div>
+
+        <div className="space-y-4">
+          <div className={`p-6 ${panelClass}`}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold text-white">🔴 A Pagar</h2>
+              <AnimatedCurrency value={summary.payable.total} className="text-red-400 font-bold" />
+            </div>
+            {summary.payable.items.slice(0, 4).map((p: any) => (
+              <div key={p.id} className="flex justify-between text-sm py-2 border-b border-gray-800 last:border-0">
+                <span className="text-gray-300">{p.description}</span>
+                <div className="text-right">
+                  <div className="text-red-400">{formatCurrency(p.amount)}</div>
+                  <div className="text-gray-500 text-xs">{new Date(p.dueDate).toLocaleDateString('pt-BR')}</div>
+                </div>
+              </div>
+            ))}
+            {summary.payable.items.length === 0 && <p className="text-gray-500 text-sm">Nenhuma conta pendente ✅</p>}
+          </div>
+
+          <div className={`p-6 ${panelClass}`}>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-lg font-semibold text-white">🟢 A Receber</h2>
+              <AnimatedCurrency value={summary.receivable.total} className="text-green-400 font-bold" />
+            </div>
+            {summary.receivable.items.slice(0, 4).map((p: any) => (
+              <div key={p.id} className="flex justify-between text-sm py-2 border-b border-gray-800 last:border-0">
+                <span className="text-gray-300">{p.description}</span>
+                <span className="text-green-400">{formatCurrency(p.amount)}</span>
+              </div>
+            ))}
+            {summary.receivable.items.length === 0 && <p className="text-gray-500 text-sm">Nenhum valor a receber</p>}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className={`p-6 ${panelClass}`}>
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingDown size={18} className="text-orange-400" />
+            <h2 className="text-lg font-semibold text-white">Top Gastos Familiares</h2>
+          </div>
+          <div className="space-y-2">
+            {summary.family.topSpending.length > 0 ? summary.family.topSpending.map((item) => (
+              <div key={item.name} className="flex items-center justify-between text-sm border-b border-gray-800 pb-2">
+                <span className="text-gray-300">{item.name}</span>
+                <span className="text-white font-medium">{formatCurrency(item.amount)}</span>
+              </div>
+            )) : <p className="text-sm text-gray-500">Sem gastos no periodo.</p>}
+          </div>
+        </div>
+
+        <div className={`p-6 ${panelClass}`}>
+          <div className="flex items-center gap-2 mb-4">
+            <CalendarClock size={18} className="text-cyan-400" />
+            <h2 className="text-lg font-semibold text-white">Resumo de Hoje</h2>
+          </div>
+          <p className="text-sm text-gray-300 mb-3">Total gasto hoje: <span className="text-white font-semibold">{formatCurrency(summary.family.dailyDigest.totalSpentToday)}</span></p>
+          <div className="space-y-2">
+            {summary.family.dailyDigest.transactions.length > 0 ? summary.family.dailyDigest.transactions.map((tx) => (
+              <div key={tx.id} className="flex items-center justify-between text-sm border-b border-gray-800 pb-2">
+                <div>
+                  <p className="text-gray-200">{tx.description}</p>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <p className="text-xs text-gray-500">{tx.category}</p>
+                    <PaymentMethodChip method={tx.paymentMethod} />
+                  </div>
+                </div>
+                <span className="text-red-400">{formatCurrency(tx.amount)}</span>
+              </div>
+            )) : <p className="text-sm text-gray-500">Sem lancamentos hoje.</p>}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className={`p-6 ${panelClass}`}>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-white">Sonhos da Familia</h2>
+          </div>
+
+          <form onSubmit={handleAddGoal} className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4">
+            <input
+              value={goalForm.name}
+              onChange={(e) => setGoalForm((prev) => ({ ...prev, name: e.target.value }))}
+              placeholder="Ex: Comprar casa"
+              className="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
+              required
+            />
+            <input
+              type="number"
+              min="1"
+              value={goalForm.targetAmount}
+              onChange={(e) => setGoalForm((prev) => ({ ...prev, targetAmount: e.target.value }))}
+              placeholder="Meta (R$)"
+              className="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
+              required
+            />
+            <div className="flex gap-2">
+              <input
+                type="number"
+                min="0"
+                value={goalForm.currentAmount}
+                onChange={(e) => setGoalForm((prev) => ({ ...prev, currentAmount: e.target.value }))}
+                placeholder="Ja guardado"
+                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
+              />
+              <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg px-3 py-2">
+                <Plus size={16} />
+              </button>
+            </div>
+          </form>
+
+          <div className="space-y-3">
+            {goals.length === 0 ? (
+              <p className="text-sm text-gray-500">Cadastre sua primeira meta familiar.</p>
+            ) : goals.map((goal) => {
+              const progress = goal.targetAmount > 0 ? Math.min((goal.currentAmount / goal.targetAmount) * 100, 100) : 0
+              return (
+                <div key={goal.id} className="bg-gray-800 rounded-xl p-3 border border-gray-700">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-white font-medium text-sm">{goal.name}</p>
+                      <p className="text-xs text-gray-400">{formatCurrency(goal.currentAmount)} / {formatCurrency(goal.targetAmount)}</p>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteGoal(goal.id)}
+                      className="text-gray-500 hover:text-red-400"
+                      title="Excluir meta"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                  <div className="w-full h-2 bg-gray-700 rounded-full mt-2 overflow-hidden">
+                    <div className="h-full bg-blue-500" style={{ width: `${progress}%` }} />
+                  </div>
+                  <input
+                    type="number"
+                    min="0"
+                    defaultValue={goal.currentAmount}
+                    onBlur={(e) => handleUpdateGoalProgress(goal.id, Number(e.target.value || 0))}
+                    className="mt-2 w-full bg-gray-900 border border-gray-700 text-white rounded-lg px-2 py-1 text-xs"
+                  />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className={`p-6 ${panelClass}`}>
+          <h2 className="text-lg font-semibold text-white mb-4">Coach IA: Posso comprar?</h2>
+          <form onSubmit={handleSimulatePurchase} className="flex gap-2 mb-4">
+            <input
+              type="number"
+              min="1"
+              value={simAmount}
+              onChange={(e) => setSimAmount(e.target.value)}
+              placeholder="Valor da compra (R$)"
+              className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
+              required
+            />
+            <button type="submit" className="bg-cyan-500 hover:bg-cyan-400 text-black font-semibold px-4 rounded-lg">Simular</button>
+          </form>
+
+          {simResult ? (
+            <div className="space-y-2 text-sm">
+              <p className={`${simResult.canAfford ? 'text-emerald-400' : 'text-rose-400'} font-semibold`}>{simResult.canAfford ? 'Pode.' : 'Cuidado.'}</p>
+              <p className="text-gray-300">{simResult.message}</p>
+              <p className="text-gray-400">Economia atual: <span className="text-white">{formatCurrency(simResult.currentMonthlySavings)}</span></p>
+              <p className="text-gray-400">Economia projetada: <span className="text-white">{formatCurrency(simResult.projectedMonthlySavings)}</span></p>
+              {simResult.goalDelayMonths !== null && (
+                <p className="text-gray-400">Impacto na meta principal: <span className="text-white">atraso estimado de {simResult.goalDelayMonths} mes(es)</span></p>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">Digite um valor para receber recomendacao personalizada de impacto na meta.</p>
+          )}
+        </div>
+      </div>
+
+      <div className={`p-6 ${panelClass}`}>
+        <h2 className="text-lg font-semibold text-white mb-4">🏦 Contas</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {summary.balance.accounts.map((acc: any) => (
+            <div key={acc.id} className="bg-gray-800 rounded-xl p-4">
+              <div className="text-gray-400 text-sm">{acc.type === 'CASH' ? '💵' : '🏦'} {acc.name}</div>
+              <div className={`text-lg font-bold mt-1 ${acc.balance >= 0 ? 'text-white' : 'text-red-400'}`}>
+                {formatCurrency(acc.balance)}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className={`p-6 ${panelClass}`}>
+        <h2 className="text-lg font-semibold text-white mb-4">Notificacoes da Familia</h2>
+
+        {!settings ? (
+          <p className="text-sm text-gray-500">Carregando configuracoes...</p>
+        ) : (
+          <form onSubmit={handleSaveSettings} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <label className="flex items-center justify-between bg-gray-800 rounded-lg p-3 text-sm">
+                <span className="text-gray-300">Lembretes de contas</span>
+                <input type="checkbox" checked={settings.remindersEnabled} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, remindersEnabled: e.target.checked }) : prev)} />
+              </label>
+              <label className="flex items-center justify-between bg-gray-800 rounded-lg p-3 text-sm">
+                <span className="text-gray-300">Alerta de caixa negativo</span>
+                <input type="checkbox" checked={settings.cashflowAlertEnabled} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, cashflowAlertEnabled: e.target.checked }) : prev)} />
+              </label>
+              <label className="flex items-center justify-between bg-gray-800 rounded-lg p-3 text-sm">
+                <span className="text-gray-300">Resumo diario</span>
+                <input type="checkbox" checked={settings.dailyDigestEnabled} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, dailyDigestEnabled: e.target.checked }) : prev)} />
+              </label>
+              <label className="flex items-center justify-between bg-gray-800 rounded-lg p-3 text-sm">
+                <span className="text-gray-300">Resumo semanal</span>
+                <input type="checkbox" checked={settings.weeklyDigestEnabled} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, weeklyDigestEnabled: e.target.checked }) : prev)} />
+              </label>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-1">Fuso horario</p>
+                <select value={settings.timezone} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, timezone: e.target.value }) : prev)} className="w-full bg-gray-900 border border-gray-700 text-white rounded px-2 py-1 text-sm">
+                  <option value="America/Sao_Paulo">America/Sao_Paulo</option>
+                  <option value="America/Manaus">America/Manaus</option>
+                  <option value="America/Belem">America/Belem</option>
+                  <option value="America/Fortaleza">America/Fortaleza</option>
+                  <option value="America/Cuiaba">America/Cuiaba</option>
+                </select>
+              </div>
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-1">Hora lembretes (0-23)</p>
+                <input type="number" min="0" max="23" value={settings.remindersHour} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, remindersHour: Number(e.target.value) }) : prev)} className="w-full bg-gray-900 border border-gray-700 text-white rounded px-2 py-1 text-sm" />
+              </div>
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-1">Hora resumo diario (0-23)</p>
+                <input type="number" min="0" max="23" value={settings.dailyDigestHour} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, dailyDigestHour: Number(e.target.value) }) : prev)} className="w-full bg-gray-900 border border-gray-700 text-white rounded px-2 py-1 text-sm" />
+              </div>
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-1">Hora resumo semanal (0-23)</p>
+                <input type="number" min="0" max="23" value={settings.weeklyDigestHour} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, weeklyDigestHour: Number(e.target.value) }) : prev)} className="w-full bg-gray-900 border border-gray-700 text-white rounded px-2 py-1 text-sm" />
+              </div>
+            </div>
+
+            <div className="bg-gray-800 rounded-lg p-3 max-w-xs">
+              <p className="text-xs text-gray-400 mb-1">Dia resumo semanal</p>
+              <select value={settings.weeklyDigestWeekday} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, weeklyDigestWeekday: Number(e.target.value) }) : prev)} className="w-full bg-gray-900 border border-gray-700 text-white rounded px-2 py-1 text-sm">
+                <option value={0}>Domingo</option>
+                <option value={1}>Segunda</option>
+                <option value={2}>Terca</option>
+                <option value={3}>Quarta</option>
+                <option value={4}>Quinta</option>
+                <option value={5}>Sexta</option>
+                <option value={6}>Sabado</option>
+              </select>
+            </div>
+
+            <div className="bg-gray-800 rounded-lg p-3">
+              <p className="text-xs text-gray-400 mb-1">Ultimos envios</p>
+              <div className="text-xs text-gray-300 space-y-1">
+                <p>Lembretes: {settings.lastRemindersSentAt ? new Date(settings.lastRemindersSentAt).toLocaleString('pt-BR') : 'nunca'}</p>
+                <p>Resumo diario: {settings.lastDailyDigestSentAt ? new Date(settings.lastDailyDigestSentAt).toLocaleString('pt-BR') : 'nunca'}</p>
+                <p>Resumo semanal: {settings.lastWeeklyDigestSentAt ? new Date(settings.lastWeeklyDigestSentAt).toLocaleString('pt-BR') : 'nunca'}</p>
+              </div>
+            </div>
+
+            <button type="submit" disabled={savingSettings} className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-black font-semibold px-4 py-2 rounded-lg">
+              {savingSettings ? 'Salvando...' : 'Salvar configuracoes'}
+            </button>
+          </form>
+        )}
+      </div>
+
+      <div className={`p-6 ${panelClass}`}>
+        <h2 className="text-lg font-semibold text-white mb-4">Minha Conta</h2>
+
+        <form onSubmit={handleChangePassword} className="space-y-3 max-w-xl">
+          <div>
+            <label className="text-xs text-gray-400">Senha atual</label>
+            <div className="mt-1 flex gap-2">
+              <input
+                type={showCurrentPassword ? 'text' : 'password'}
+                value={accountForm.currentPassword}
+                onChange={(e) => setAccountForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
+                required
+              />
+              <button type="button" onClick={() => setShowCurrentPassword((v) => !v)} className="bg-gray-800 border border-gray-700 text-gray-200 rounded-lg px-3 py-2 text-xs">
+                {showCurrentPassword ? 'Ocultar' : 'Mostrar'}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-400">Nova senha</label>
+            <div className="mt-1 flex gap-2">
+              <input
+                type={showNewPassword ? 'text' : 'password'}
+                value={accountForm.newPassword}
+                onChange={(e) => setAccountForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
+                required
+              />
+              <button type="button" onClick={() => setShowNewPassword((v) => !v)} className="bg-gray-800 border border-gray-700 text-gray-200 rounded-lg px-3 py-2 text-xs">
+                {showNewPassword ? 'Ocultar' : 'Mostrar'}
+              </button>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1">Requisitos: 8+ caracteres, maiuscula, minuscula, numero e simbolo.</p>
+          </div>
+
+          <div>
+            <label className="text-xs text-gray-400">Confirmar nova senha</label>
+            <div className="mt-1 flex gap-2">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                value={accountForm.confirmNewPassword}
+                onChange={(e) => setAccountForm((prev) => ({ ...prev, confirmNewPassword: e.target.value }))}
+                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
+                required
+              />
+              <button type="button" onClick={() => setShowConfirmPassword((v) => !v)} className="bg-gray-800 border border-gray-700 text-gray-200 rounded-lg px-3 py-2 text-xs">
+                {showConfirmPassword ? 'Ocultar' : 'Mostrar'}
+              </button>
+            </div>
+          </div>
+
+          {accountMessage && (
+            <p className={`text-sm ${accountMessage.toLowerCase().includes('sucesso') ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {accountMessage}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={savingAccount}
+            className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-black font-semibold px-4 py-2 rounded-lg"
+          >
+            {savingAccount ? 'Salvando...' : 'Alterar senha'}
+          </button>
+        </form>
+      </div>
+
+      <div className={`p-6 space-y-4 ${panelClass}`}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-white">Diagnostico do Sistema</h2>
+          <button
+            type="button"
+            onClick={loadDiagnostics}
+            className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-lg"
+          >
+            Atualizar
+          </button>
+        </div>
+
+        {diagnosticError && (
+          <p className="text-sm text-rose-400">{diagnosticError}</p>
+        )}
+
+        {!systemHealth ? (
+          <p className="text-sm text-gray-500">Carregando diagnostico...</p>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-gray-400">Backend</p>
+                <p className={`${systemHealth.status === 'ok' ? 'text-emerald-400' : 'text-amber-400'} font-semibold`}>
+                  {systemHealth.status === 'ok' ? 'Saudavel' : 'Degradado'}
+                </p>
+                <p className="text-gray-500 text-xs mt-1">Uptime: {Math.floor(systemHealth.server.uptimeSec / 60)} min</p>
+              </div>
+
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-gray-400">Banco</p>
+                <p className={`${systemHealth.database.status === 'ok' ? 'text-emerald-400' : 'text-rose-400'} font-semibold`}>
+                  {systemHealth.database.status === 'ok' ? 'Conectado' : 'Erro'}
+                </p>
+                {systemHealth.database.error && <p className="text-rose-400 text-xs mt-1">{systemHealth.database.error}</p>}
+              </div>
+
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-gray-400">IA</p>
+                <p className="text-white font-semibold">{systemHealth.openai.mode}</p>
+                <p className="text-gray-500 text-xs mt-1">OpenAI {systemHealth.openai.configured ? 'configurada' : 'nao configurada'}</p>
+              </div>
+            </div>
+
+            {!systemHealth.whatsapp.enabled ? (
+              <div className="bg-gray-800 rounded-lg p-3 text-sm">
+                <p className="text-gray-300 mb-1">Canal de Automacao</p>
+                <p className="text-emerald-400 font-semibold">Modo app-only ativo</p>
+                <p className="text-gray-500 text-xs mt-1">WhatsApp desativado. Use lancamentos manuais em "Lancamentos".</p>
+              </div>
+            ) : (
+              <>
+                <div className="bg-gray-800 rounded-lg p-3 text-sm">
+                  <p className="text-gray-300 mb-2">WhatsApp Runtime</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                    <p className="text-gray-400">Ativas: <span className="text-white">{systemHealth.whatsapp.runtime.activeCount}</span></p>
+                    <p className="text-gray-400">Conectadas: <span className="text-emerald-400">{systemHealth.whatsapp.runtime.connectedCount}</span></p>
+                    <p className="text-gray-400">Aguardando QR: <span className="text-amber-400">{systemHealth.whatsapp.runtime.qrPendingCount}</span></p>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-400">
+                    <p>
+                      Reparo diario: <span className="text-white">{systemHealth.whatsapp.repairLimit.used}/{systemHealth.whatsapp.repairLimit.limit}</span>
+                      {' '}({systemHealth.whatsapp.repairLimit.remaining} restante{systemHealth.whatsapp.repairLimit.remaining === 1 ? '' : 's'})
+                    </p>
+                    <p>Janela iniciada em {new Date(systemHealth.whatsapp.repairLimit.periodStart).toLocaleString('pt-BR')}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-300">Sessoes do Tenant</p>
+                  {systemHealth.whatsapp.tenantSessions.length === 0 ? (
+                    <p className="text-sm text-gray-500">Nenhuma sessao cadastrada.</p>
+                  ) : systemHealth.whatsapp.tenantSessions.map((session) => (
+                    <div key={session.id} className="bg-gray-800 rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                      <div>
+                        <p className="text-sm text-white">{session.phoneNumber}</p>
+                        <p className="text-xs text-gray-400">
+                          {session.isActive ? 'Ativa' : 'Inativa'}
+                          {session.connectedAt ? ` • conectada em ${new Date(session.connectedAt).toLocaleString('pt-BR')}` : ''}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleRepairSession(session.id)}
+                        disabled={repairingSessionId === session.id}
+                        className="bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-black font-semibold px-3 py-2 rounded-lg text-xs"
+                      >
+                        {repairingSessionId === session.id ? 'Reparando...' : 'Reparar sessao'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-gray-800 rounded-lg p-3">
+                  <p className="text-sm text-gray-300 mb-2">Auditoria de Reparo (ultimos eventos)</p>
+                  {systemHealth.whatsapp.repairAudit.length === 0 ? (
+                    <p className="text-xs text-gray-500">Nenhum reparo registrado nesta execucao.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {systemHealth.whatsapp.repairAudit.slice(0, 8).map((item, idx) => (
+                        <div key={`${item.at}-${item.sessionId}-${idx}`} className="text-xs text-gray-300 border-b border-gray-700 pb-2 last:border-0">
+                          <p>
+                            <span className={`${item.outcome === 'SUCCESS' ? 'text-emerald-400' : item.outcome === 'FAILED' ? 'text-rose-400' : 'text-amber-400'} font-semibold`}>
+                              {item.outcome}
+                            </span>
+                            {' '}• {item.phoneNumber} • {new Date(item.at).toLocaleString('pt-BR')}
+                          </p>
+                          {item.actor?.email && <p className="text-gray-500">por {item.actor.email}</p>}
+                          {item.error && <p className="text-rose-400">erro: {item.error}</p>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {repairQr && (
+                  <div className="bg-gray-800 rounded-lg p-3">
+                    <p className="text-sm text-gray-300 mb-2">Novo QR de reparo</p>
+                    <img src={repairQr} alt="QR Code de reparo" className="w-64 h-64 bg-white p-2 rounded" />
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+    </div>
+  )
+}
+
+function PaymentMethodChip({ method }: { method?: string }) {
+  const meta = getPaymentMethodMeta(method)
+  const Icon = meta.icon
+
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] ${meta.className}`}>
+      <Icon size={10} />
+      {meta.label}
+    </span>
+  )
+}
+
+function StatCard({ label, numericValue, icon, color }: { label: string; numericValue: number; icon: React.ReactNode; color: string }) {
+  const colors: Record<string, string> = {
+    green: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/25',
+    blue: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/25',
+    red: 'bg-rose-500/15 text-rose-300 border-rose-500/25',
+    yellow: 'bg-amber-500/15 text-amber-300 border-amber-500/25',
+  }
+  const animatedValue = useAnimatedNumber(numericValue)
+
+  return (
+    <div className="dashboard-panel rounded-2xl p-6 border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_10px_30px_rgba(2,8,23,0.4)]">
+      <div className={`inline-flex p-2 rounded-lg mb-3 border ${colors[color]}`}>{icon}</div>
+      <div className="text-slate-400 text-xs uppercase tracking-wider">{label}</div>
+      <div className={`text-2xl font-black mt-1 ${color === 'red' ? 'text-rose-300' : 'text-white'}`}>{formatCurrency(animatedValue)}</div>
+    </div>
+  )
+}
+

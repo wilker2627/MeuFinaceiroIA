@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: meufinanceiro-backend
+    env: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install ; npm run db:generate
+    startCommand: npm run start:render
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WA_ENABLED
+        value: "false"
+      - key: ALLOW_LOCAL_PASSWORD_RESET
+        value: "false"
+      - key: PORT
+        value: "3001"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: FRONTEND_URLS
+        sync: false

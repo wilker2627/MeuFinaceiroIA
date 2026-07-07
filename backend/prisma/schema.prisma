@@ -1,0 +1,393 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  phoneNumber String   @unique
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenantUsers       TenantUser[]
+  transactions      Transaction[]
+  scheduledPayments ScheduledPayment[]
+  whatsappSessions  WhatsAppSession[]
+  userContexts      UserContext[]
+
+  @@map("users")
+}
+
+model Tenant {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  plan          String    @default("FREE")
+  planExpiresAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  isActive      Boolean   @default(true)
+
+  tenantUsers       TenantUser[]
+  whatsappSessions  WhatsAppSession[]
+  transactions      Transaction[]
+  accounts          Account[]
+  categories        Category[]
+  contacts          Contact[]
+  scheduledPayments ScheduledPayment[]
+  goals             Goal[]
+  alerts            Alert[]
+  notificationSettings TenantNotificationSettings?
+  whatsAppRepairAudits WhatsAppRepairAudit[]
+  supportTickets    SupportTicket[]
+  billingCheckouts  BillingCheckout[]
+  familyInvites     FamilyInvite[]
+
+  @@map("tenants")
+}
+
+model BillingCheckout {
+  id                 String   @id @default(cuid())
+  tenantName         String
+  email              String
+  passwordHash       String
+  planCode           String
+  baseAmountCents    Int
+  finalAmountCents   Int
+  couponCode         String?
+  status             String   @default("PENDING")
+  paymentProvider    String   @default("INTERNAL")
+  providerReference  String?
+  checkoutUrl        String?
+  tenantId           String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  onboardingEvents OnboardingEvent[]
+
+  @@index([email, status])
+  @@map("billing_checkouts")
+}
+
+model OnboardingEvent {
+  id          String   @id @default(cuid())
+  checkoutId  String?
+  email       String
+  eventType   String
+  metadata    String?
+  createdAt   DateTime @default(now())
+
+  checkout BillingCheckout? @relation(fields: [checkoutId], references: [id], onDelete: SetNull)
+
+  @@index([email, createdAt])
+  @@index([eventType, createdAt])
+  @@map("onboarding_events")
+}
+
+model FamilyInvite {
+  id           String   @id @default(cuid())
+  tenantId     String
+  invitedName  String?
+  invitedPhone String
+  token        String   @unique
+  status       String   @default("PENDING")
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  createdAt    DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@map("family_invites")
+}
+
+model AdminPlan {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  name           String
+  priceCents     Int      @default(0)
+  messageLimit   Int?
+  userLimit      Int?
+  accountLimit   Int?
+  features       String?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("admin_plans")
+}
+
+model AdminCoupon {
+  id             String   @id @default(cuid())
+  code           String   @unique
+  description    String?
+  discountPercent Int?
+  firstMonthFree Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  expiresAt      DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("admin_coupons")
+}
+
+model AdminAiPolicy {
+  id                    String   @id @default(cuid())
+  policyKey             String   @unique @default("default")
+  modelName             String   @default("gpt-4o-mini")
+  dailyLimit            Int      @default(5000)
+  monthlyLimit          Int      @default(100000)
+  messagesPerTenant     Int      @default(2000)
+  updatedAt             DateTime @updatedAt
+  createdAt             DateTime @default(now())
+
+  @@map("admin_ai_policies")
+}
+
+model SupportTicket {
+  id             String   @id @default(cuid())
+  tenantId       String
+  subject        String
+  status         String   @default("OPEN")
+  priority       String   @default("NORMAL")
+  lastMessage    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@map("support_tickets")
+}
+
+model AdminAnnouncement {
+  id         String   @id @default(cuid())
+  title      String
+  message    String
+  sentCount  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@map("admin_announcements")
+}
+
+model WhatsAppRepairAudit {
+  id               String   @id @default(cuid())
+  tenantId         String
+  sessionId        String
+  phoneNumber      String
+  actorTenantEmail String?
+  actorTenantPlan  String?
+  outcome          String
+  error            String?
+  createdAt        DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, sessionId, createdAt])
+  @@map("whatsapp_repair_audits")
+}
+
+model TenantUser {
+  id       String   @id @default(cuid())
+  tenantId String
+  userId   String
+  role     String   @default("EMPLOYEE")
+  nickname String?
+  isActive Boolean  @default(true)
+  joinedAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@map("tenant_users")
+}
+
+model UserContext {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  activeTenantId String
+  updatedAt      DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_contexts")
+}
+
+model WhatsAppSession {
+  id          String    @id @default(cuid())
+  tenantId    String
+  userId      String?
+  phoneNumber String
+  sessionPath String
+  isActive    Boolean   @default(false)
+  connectedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id])
+
+  @@unique([tenantId, phoneNumber])
+  @@map("whatsapp_sessions")
+}
+
+model Account {
+  id        String   @id @default(cuid())
+  tenantId  String
+  name      String
+  type      String   @default("CHECKING")
+  balance   Float    @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@map("accounts")
+}
+
+model Category {
+  id       String  @id @default(cuid())
+  tenantId String
+  name     String
+  type     String
+  color    String?
+  icon     String?
+  budget   Float?
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@unique([tenantId, name])
+  @@map("categories")
+}
+
+model Contact {
+  id       String  @id @default(cuid())
+  tenantId String
+  name     String
+  type     String  @default("OTHER")
+  phone    String?
+  email    String?
+  document String?
+
+  tenant             Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  transactionsAsFrom Transaction[]      @relation("TransactionFrom")
+  transactionsAsTo   Transaction[]      @relation("TransactionTo")
+  scheduledPayments  ScheduledPayment[]
+
+  @@map("contacts")
+}
+
+model Transaction {
+  id                String    @id @default(cuid())
+  tenantId          String
+  accountId         String?
+  categoryId        String?
+  fromId            String?
+  toId              String?
+  userId            String?
+  type              String
+  paymentMethod     String    @default("CASH")
+  amount            Float
+  description       String
+  date              DateTime  @default(now())
+  dueDate           DateTime?
+  isPaid            Boolean   @default(true)
+  isRecurring       Boolean   @default(false)
+  installments      Int?
+  installmentNumber Int?
+  groupId           String?
+  rawMessage        String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  account  Account?  @relation(fields: [accountId], references: [id])
+  category Category? @relation(fields: [categoryId], references: [id])
+  from     Contact?  @relation("TransactionFrom", fields: [fromId], references: [id])
+  to       Contact?  @relation("TransactionTo", fields: [toId], references: [id])
+  user     User?     @relation(fields: [userId], references: [id])
+
+  @@map("transactions")
+}
+
+model ScheduledPayment {
+  id           String    @id @default(cuid())
+  tenantId     String
+  contactId    String?
+  userId       String?
+  description  String
+  amount       Float
+  dueDate      DateTime
+  type         String    @default("EXPENSE")
+  status       String    @default("PENDING")
+  isRecurring  Boolean   @default(false)
+  recurringDay Int?
+  notified     Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contact Contact? @relation(fields: [contactId], references: [id])
+  user    User?    @relation(fields: [userId], references: [id])
+
+  @@map("scheduled_payments")
+}
+
+model Goal {
+  id            String    @id @default(cuid())
+  tenantId      String
+  name          String
+  targetAmount  Float
+  currentAmount Float     @default(0)
+  deadline      DateTime?
+  createdAt     DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("goals")
+}
+
+model Alert {
+  id        String    @id @default(cuid())
+  tenantId  String
+  type      String
+  message   String
+  isRead    Boolean   @default(false)
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("alerts")
+}
+
+model TenantNotificationSettings {
+  id                   String   @id @default(cuid())
+  tenantId             String   @unique
+  timezone             String   @default("America/Sao_Paulo")
+  remindersEnabled     Boolean  @default(true)
+  remindersHour        Int      @default(8)
+  dailyDigestEnabled   Boolean  @default(true)
+  dailyDigestHour      Int      @default(20)
+  weeklyDigestEnabled  Boolean  @default(true)
+  weeklyDigestWeekday  Int      @default(0)
+  weeklyDigestHour     Int      @default(19)
+  cashflowAlertEnabled Boolean  @default(true)
+  lastRemindersSentAt  DateTime?
+  lastDailyDigestSentAt DateTime?
+  lastWeeklyDigestSentAt DateTime?
+  updatedAt            DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_notification_settings")
+}

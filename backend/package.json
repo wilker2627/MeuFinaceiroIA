@@ -1,0 +1,43 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "Backend - IA Financeira WhatsApp",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "kill:3001": "powershell -NoProfile -Command \"$conn = Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue; if ($conn) { $procIds = $conn | Select-Object -ExpandProperty OwningProcess -Unique; foreach ($procId in $procIds) { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue }; Write-Output ('Killed PID(s): ' + ($procIds -join ', ')) } else { Write-Output 'No listener on port 3001' }\"",
+    "kill:backend-watch": "powershell -NoProfile -Command \"$procs = Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match 'node\\s+--watch\\s+src/index\\.js' }; if ($procs) { $ids = $procs | Select-Object -ExpandProperty ProcessId; foreach ($id in $ids) { Stop-Process -Id $id -Force -ErrorAction SilentlyContinue }; Write-Output ('Killed backend watcher PID(s): ' + ($ids -join ', ')) } else { Write-Output 'No backend watcher process found' }\"",
+    "dev": "node --watch src/index.js",
+    "restart": "npm run kill:backend-watch && npm run kill:3001 && npm run dev",
+    "start": "node src/index.js",
+    "start:render": "prisma db push && node src/index.js",
+    "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:generate": "prisma generate"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "@whiskeysockets/baileys": "^6.7.18",
+    "axios": "^1.7.9",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "date-fns": "^4.1.0",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "node-cron": "^3.0.3",
+    "openai": "^4.76.0",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
+    "qrcode-terminal": "^0.12.0",
+    "sharp": "^0.33.5",
+    "uuid": "^11.0.3",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0"
+  }
+}

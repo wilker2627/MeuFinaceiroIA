@@ -1,0 +1,38 @@
+<svg width="320" height="320" viewBox="0 0 320 320" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="32" y1="24" x2="288" y2="296" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1220"/>
+      <stop offset="1" stop-color="#071A1F"/>
+    </linearGradient>
+    <linearGradient id="ring" x1="70" y1="52" x2="250" y2="270" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#22D3EE"/>
+      <stop offset="1" stop-color="#34D399"/>
+    </linearGradient>
+    <linearGradient id="pulse" x1="120" y1="102" x2="212" y2="214" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67E8F9"/>
+      <stop offset="1" stop-color="#6EE7B7"/>
+    </linearGradient>
+    <filter id="glow" x="34" y="34" width="252" height="252" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="16" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <rect x="32" y="24" width="256" height="272" rx="56" fill="url(#bg)"/>
+
+  <g filter="url(#glow)">
+    <circle cx="160" cy="160" r="90" stroke="url(#ring)" stroke-width="14"/>
+  </g>
+
+  <path d="M93 168C108 150 118 146 129 146C145 146 152 160 166 160C179 160 186 149 199 142C209 137 219 136 230 142"
+        stroke="url(#pulse)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <circle cx="95" cy="169" r="10" fill="#22D3EE"/>
+  <circle cx="231" cy="142" r="10" fill="#34D399"/>
+
+  <path d="M130 210V107M130 107H164C177 107 187 117 187 130C187 143 177 153 164 153H130"
+        stroke="#CFFAFE" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <path d="M200 211H226" stroke="#99F6E4" stroke-width="12" stroke-linecap="round"/>
+  <path d="M213 198V224" stroke="#99F6E4" stroke-width="12" stroke-linecap="round"/>
+</svg>
