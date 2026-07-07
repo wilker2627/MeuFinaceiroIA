@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import api from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
-import { Plus, Trash2, Search, CreditCard, Wallet, QrCode, Loader, AlertCircle } from 'lucide-react'
+import { Plus, Trash2, Search, CreditCard, Wallet, QrCode, Loader } from 'lucide-react'
 import ConfirmModal from '@/components/ConfirmModal'
 import EmptyState, { LoadingSkeleton } from '@/components/EmptyState'
 import ExportData from '@/components/ExportData'
@@ -266,46 +266,84 @@ export default function TransactionsPage() {
             }}
           />
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-950/80 text-slate-400">
-              <tr>
-                <th className="text-left px-6 py-3">Descrição</th>
-                <th className="text-left px-4 py-3">Categoria</th>
-                <th className="text-left px-4 py-3">Pagamento</th>
-                <th className="text-left px-4 py-3">Responsável</th>
-                <th className="text-left px-4 py-3">Data</th>
-                <th className="text-right px-6 py-3">Valor</th>
-                <th className="px-4 py-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map(tx => (
-                <tr key={tx.id} className="border-t border-cyan-500/15 hover:bg-cyan-500/5 transition-colors">
-                  <td className="px-6 py-4 text-white">{tx.description}</td>
-                  <td className="px-4 py-4">
+          <>
+            <div className="md:hidden divide-y divide-cyan-500/15">
+              {transactions.map((tx) => (
+                <div key={tx.id} className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-white font-medium">{tx.description}</p>
+                      <p className="text-xs text-slate-400 mt-1">{formatDate(tx.date)}</p>
+                    </div>
+                    <div className={`text-sm font-semibold ${tx.type === 'INCOME' ? 'text-green-400' : 'text-red-400'}`}>
+                      {tx.type === 'INCOME' ? '+' : '-'}{formatCurrency(tx.amount)}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
                     {tx.category ? (
                       <span className="px-2 py-1 rounded-full text-xs text-white" style={{ backgroundColor: tx.category.color + '40', color: tx.category.color }}>
                         {tx.category.name}
                       </span>
-                    ) : <span className="text-slate-600">—</span>}
-                  </td>
-                  <td className="px-4 py-4 text-slate-300 text-xs">
+                    ) : (
+                      <span className="text-xs text-slate-600">Sem categoria</span>
+                    )}
                     <PaymentMethodChip meta={getPaymentMethodMeta(tx.paymentMethod)} />
-                  </td>
-                  <td className="px-4 py-4 text-slate-400">{tx.user?.name || '—'}</td>
-                  <td className="px-4 py-4 text-slate-400">{formatDate(tx.date)}</td>
-                  <td className={`px-6 py-4 text-right font-semibold ${tx.type === 'INCOME' ? 'text-green-400' : 'text-red-400'}`}>
-                    {tx.type === 'INCOME' ? '+' : '-'}{formatCurrency(tx.amount)}
-                  </td>
-                  <td className="px-4 py-4">
-                    <button onClick={() => setDeleteConfirm({ open: true, txId: tx.id })} className="text-slate-600 hover:text-red-400 transition-colors">
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
+                    <span className="text-xs text-slate-400">{tx.user?.name || 'Sem responsável'}</span>
+                  </div>
+
+                  <button
+                    onClick={() => setDeleteConfirm({ open: true, txId: tx.id })}
+                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-300 hover:bg-rose-500/20 transition-colors"
+                  >
+                    <Trash2 size={15} />
+                    Excluir lançamento
+                  </button>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+
+            <table className="hidden md:table w-full text-sm">
+              <thead className="bg-slate-950/80 text-slate-400">
+                <tr>
+                  <th className="text-left px-6 py-3">Descrição</th>
+                  <th className="text-left px-4 py-3">Categoria</th>
+                  <th className="text-left px-4 py-3">Pagamento</th>
+                  <th className="text-left px-4 py-3">Responsável</th>
+                  <th className="text-left px-4 py-3">Data</th>
+                  <th className="text-right px-6 py-3">Valor</th>
+                  <th className="px-4 py-3"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {transactions.map(tx => (
+                  <tr key={tx.id} className="border-t border-cyan-500/15 hover:bg-cyan-500/5 transition-colors">
+                    <td className="px-6 py-4 text-white">{tx.description}</td>
+                    <td className="px-4 py-4">
+                      {tx.category ? (
+                        <span className="px-2 py-1 rounded-full text-xs text-white" style={{ backgroundColor: tx.category.color + '40', color: tx.category.color }}>
+                          {tx.category.name}
+                        </span>
+                      ) : <span className="text-slate-600">—</span>}
+                    </td>
+                    <td className="px-4 py-4 text-slate-300 text-xs">
+                      <PaymentMethodChip meta={getPaymentMethodMeta(tx.paymentMethod)} />
+                    </td>
+                    <td className="px-4 py-4 text-slate-400">{tx.user?.name || '—'}</td>
+                    <td className="px-4 py-4 text-slate-400">{formatDate(tx.date)}</td>
+                    <td className={`px-6 py-4 text-right font-semibold ${tx.type === 'INCOME' ? 'text-green-400' : 'text-red-400'}`}>
+                      {tx.type === 'INCOME' ? '+' : '-'}{formatCurrency(tx.amount)}
+                    </td>
+                    <td className="px-4 py-4">
+                      <button onClick={() => setDeleteConfirm({ open: true, txId: tx.id })} className="text-slate-600 hover:text-red-400 transition-colors">
+                        <Trash2 size={16} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
         )}
       </div>
 
