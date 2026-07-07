@@ -350,6 +350,22 @@ export default function DashboardPage() {
 
       const [{ jsPDF }] = await Promise.all([import('jspdf')])
 
+      const loadLogoDataUrl = async () => {
+        try {
+          const response = await fetch('/icon')
+          if (!response.ok) return null
+          const blob = await response.blob()
+          return await new Promise<string | null>((resolve) => {
+            const reader = new FileReader()
+            reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : null)
+            reader.onerror = () => resolve(null)
+            reader.readAsDataURL(blob)
+          })
+        } catch {
+          return null
+        }
+      }
+
       let reportPeriodLabel = currentSummary.currentMonth
       let reportIncome = Number(currentSummary.cashFlow.income || 0)
       let reportExpenses = Number(currentSummary.cashFlow.expenses || 0)
@@ -409,10 +425,12 @@ export default function DashboardPage() {
 
       const doc = new jsPDF({ unit: 'pt', format: 'a4' })
       const pageWidth = doc.internal.pageSize.getWidth()
+      const pageHeight = doc.internal.pageSize.getHeight()
       const marginX = 44
       const contentWidth = pageWidth - marginX * 2
       const now = new Date()
       const generatedAt = now.toLocaleString('pt-BR')
+      const logoDataUrl = await loadLogoDataUrl()
 
       let y = 56
 
@@ -429,6 +447,37 @@ export default function DashboardPage() {
         doc.addPage()
         y = 56
       }
+
+      // Capa
+      doc.setFillColor(8, 16, 32)
+      doc.rect(0, 0, pageWidth, pageHeight, 'F')
+      doc.setFillColor(6, 182, 212)
+      doc.roundedRect(40, 60, pageWidth - 80, 6, 3, 3, 'F')
+      if (logoDataUrl) {
+        try {
+          doc.addImage(logoDataUrl, 'PNG', 46, 86, 56, 56)
+        } catch {}
+      }
+      doc.setTextColor(255, 255, 255)
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(26)
+      doc.text('FinanceiroAI', logoDataUrl ? 114 : 46, 116)
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(13)
+      doc.text('Relatorio Executivo Financeiro', logoDataUrl ? 114 : 46, 138)
+      doc.setFontSize(12)
+      doc.setTextColor(186, 230, 253)
+      doc.text(`Periodo analisado: ${reportPeriodLabel}`, 46, 196)
+      doc.text(`Gerado em: ${generatedAt}`, 46, 218)
+      doc.setTextColor(203, 213, 225)
+      doc.setFontSize(11)
+      doc.text('Este documento resume fluxo de caixa, gastos e indicadores de saude financeira.', 46, 272)
+      doc.text('Use como apoio para decisoes de curto e medio prazo da familia.', 46, 292)
+      doc.setTextColor(148, 163, 184)
+      doc.text('FinanceiroAI • Relatorio confidencial', 46, pageHeight - 44)
+
+      // Conteudo
+      doc.addPage()
 
       doc.setFillColor(15, 23, 42)
       doc.roundedRect(marginX, 28, contentWidth, 88, 10, 10, 'F')
@@ -512,6 +561,18 @@ export default function DashboardPage() {
         doc.text(`Saidas ${formatCurrency(Number(row.expenses || 0))}`, marginX + 300, y)
         y += 18
       })
+
+      const totalPages = doc.getNumberOfPages()
+      for (let page = 1; page <= totalPages; page += 1) {
+        doc.setPage(page)
+        doc.setFont('helvetica', 'normal')
+        doc.setFontSize(9)
+        doc.setTextColor(100, 116, 139)
+        doc.text(`Pagina ${page} de ${totalPages}`, pageWidth - 46, pageHeight - 20, { align: 'right' })
+        if (page > 1) {
+          doc.text('FinanceiroAI', 46, pageHeight - 20)
+        }
+      }
 
       const fileStamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
       doc.save(`relatorio-financeiro-${fileStamp}.pdf`)
