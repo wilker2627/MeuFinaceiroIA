@@ -15,17 +15,49 @@ export default function AppleIcon() {
           width: '100%',
           height: '100%',
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          borderRadius: 36,
-          background: 'linear-gradient(155deg, #06273a 0%, #0b3a5c 52%, #0f7a5b 100%)',
-          color: '#ecfeff',
-          fontSize: 66,
-          fontWeight: 800,
-          letterSpacing: -2
+          gap: 4,
+          background: 'linear-gradient(160deg, #061423 0%, #0f2a3f 45%, #06b6d4 100%)',
+          color: '#dff8ff',
+          fontFamily: 'system-ui, -apple-system, sans-serif',
+          padding: 8
         }}
       >
-        MF
+        {/* Icon Background */}
+        <div
+          style={{
+            width: 140,
+            height: 140,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'rgba(6, 182, 212, 0.2)',
+            borderRadius: 35,
+            border: '2px solid #06b6d4',
+            position: 'relative'
+          }}
+        >
+          {/* Inner circle with gradient */}
+          <div
+            style={{
+              width: 100,
+              height: 100,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'linear-gradient(135deg, #06b6d4 0%, #0ea5e9 100%)',
+              borderRadius: 25,
+              fontSize: 50,
+              fontWeight: 900,
+              color: '#0a0a0a',
+              letterSpacing: -2
+            }}
+          >
+            MF
+          </div>
+        </div>
       </div>
     ),
     size

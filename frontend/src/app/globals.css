@@ -3,6 +3,10 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --safe-area-inset-top: max(12px, env(safe-area-inset-top));
+  --safe-area-inset-bottom: max(12px, env(safe-area-inset-bottom));
+  --safe-area-inset-left: max(12px, env(safe-area-inset-left));
+  --safe-area-inset-right: max(12px, env(safe-area-inset-right));
 }
 
 @theme inline {
@@ -19,6 +23,15 @@
   }
 }
 
+html {
+  width: 100%;
+  height: 100%;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-user-scalable: no;
+}
+
 body {
   background:
     radial-gradient(circle at 12% 12%, rgba(6, 182, 212, 0.08), transparent 34%),
@@ -26,6 +39,17 @@ body {
     var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* iPhone safe area support */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: var(--safe-area-inset-left);
+    padding-right: var(--safe-area-inset-right);
+    padding-bottom: var(--safe-area-inset-bottom);
+  }
 }
 
 @keyframes pageEnter {
