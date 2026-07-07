@@ -10,6 +10,7 @@ import {
   LayoutDashboard, ArrowUpDown, Calendar, Users, LogOut, TrendingUp, Menu, X
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import ThemeToggle from '@/components/ThemeToggle'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -93,7 +94,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <div className="flex-1">{renderNavLinks()}</div>
 
-        <div className="p-4 border-t border-cyan-500/15">
+        <div className="p-4 border-t border-cyan-500/15 space-y-2">
+          <div className="flex items-center justify-between px-4">
+            <span className="text-xs text-slate-500">Aparência</span>
+            <ThemeToggle />
+          </div>
           <button
             onClick={logout}
             className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm text-slate-300 hover:bg-rose-500/15 hover:text-rose-300 w-full transition-colors"

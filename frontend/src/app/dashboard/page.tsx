@@ -7,6 +7,9 @@ import { formatCurrency } from '@/lib/utils'
 import { useAnimatedNumber } from '@/lib/useAnimatedNumber'
 import AnimatedCurrency from '@/components/AnimatedCurrency'
 import OnboardingGuide from '@/components/OnboardingGuide'
+import AIInsights from '@/components/AIInsights'
+import GoalsWidget from '@/components/GoalsWidget'
+import RecurringTransactions from '@/components/RecurringTransactions'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -997,108 +1000,15 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className={`p-6 ${panelClass}`}>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">Sonhos da Familia</h2>
-          </div>
-
-          <form onSubmit={handleAddGoal} className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-4">
-            <input
-              value={goalForm.name}
-              onChange={(e) => setGoalForm((prev) => ({ ...prev, name: e.target.value }))}
-              placeholder="Ex: Comprar casa"
-              className="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
-              required
-            />
-            <input
-              type="number"
-              min="1"
-              value={goalForm.targetAmount}
-              onChange={(e) => setGoalForm((prev) => ({ ...prev, targetAmount: e.target.value }))}
-              placeholder="Meta (R$)"
-              className="bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
-              required
-            />
-            <div className="flex gap-2">
-              <input
-                type="number"
-                min="0"
-                value={goalForm.currentAmount}
-                onChange={(e) => setGoalForm((prev) => ({ ...prev, currentAmount: e.target.value }))}
-                placeholder="Ja guardado"
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
-              />
-              <button type="submit" className="bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg px-3 py-2">
-                <Plus size={16} />
-              </button>
-            </div>
-          </form>
-
-          <div className="space-y-3">
-            {goals.length === 0 ? (
-              <p className="text-sm text-gray-500">Cadastre sua primeira meta familiar.</p>
-            ) : goals.map((goal) => {
-              const progress = goal.targetAmount > 0 ? Math.min((goal.currentAmount / goal.targetAmount) * 100, 100) : 0
-              return (
-                <div key={goal.id} className="bg-gray-800 rounded-xl p-3 border border-gray-700">
-                  <div className="flex items-center justify-between gap-2">
-                    <div>
-                      <p className="text-white font-medium text-sm">{goal.name}</p>
-                      <p className="text-xs text-gray-400">{formatCurrency(goal.currentAmount)} / {formatCurrency(goal.targetAmount)}</p>
-                    </div>
-                    <button
-                      onClick={() => handleDeleteGoal(goal.id)}
-                      className="text-gray-500 hover:text-red-400"
-                      title="Excluir meta"
-                    >
-                      <Trash2 size={15} />
-                    </button>
-                  </div>
-                  <div className="w-full h-2 bg-gray-700 rounded-full mt-2 overflow-hidden">
-                    <div className="h-full bg-blue-500" style={{ width: `${progress}%` }} />
-                  </div>
-                  <input
-                    type="number"
-                    min="0"
-                    defaultValue={goal.currentAmount}
-                    onBlur={(e) => handleUpdateGoalProgress(goal.id, Number(e.target.value || 0))}
-                    className="mt-2 w-full bg-gray-900 border border-gray-700 text-white rounded-lg px-2 py-1 text-xs"
-                  />
-                </div>
-              )
-            })}
-          </div>
+          <GoalsWidget />
         </div>
 
-        <div className={`p-6 ${panelClass}`}>
-          <h2 className="text-lg font-semibold text-white mb-4">Coach IA: Posso comprar?</h2>
-          <form onSubmit={handleSimulatePurchase} className="flex gap-2 mb-4">
-            <input
-              type="number"
-              min="1"
-              value={simAmount}
-              onChange={(e) => setSimAmount(e.target.value)}
-              placeholder="Valor da compra (R$)"
-              className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
-              required
-            />
-            <button type="submit" className="bg-cyan-500 hover:bg-cyan-400 text-black font-semibold px-4 rounded-lg">Simular</button>
-          </form>
-
-          {simResult ? (
-            <div className="space-y-2 text-sm">
-              <p className={`${simResult.canAfford ? 'text-emerald-400' : 'text-rose-400'} font-semibold`}>{simResult.canAfford ? 'Pode.' : 'Cuidado.'}</p>
-              <p className="text-gray-300">{simResult.message}</p>
-              <p className="text-gray-400">Economia atual: <span className="text-white">{formatCurrency(simResult.currentMonthlySavings)}</span></p>
-              <p className="text-gray-400">Economia projetada: <span className="text-white">{formatCurrency(simResult.projectedMonthlySavings)}</span></p>
-              {simResult.goalDelayMonths !== null && (
-                <p className="text-gray-400">Impacto na meta principal: <span className="text-white">atraso estimado de {simResult.goalDelayMonths} mes(es)</span></p>
-              )}
-            </div>
-          ) : (
-            <p className="text-sm text-gray-500">Digite um valor para receber recomendacao personalizada de impacto na meta.</p>
-          )}
+        <div className={`p-6 space-y-8 ${panelClass}`}>
+          <AIInsights />
+          <RecurringTransactions />
         </div>
       </div>
+
 
       <div className={`p-6 ${panelClass}`}>
         <h2 className="text-lg font-semibold text-white mb-4">🏦 Contas</h2>
