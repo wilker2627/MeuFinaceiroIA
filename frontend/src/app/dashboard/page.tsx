@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import api from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { useAnimatedNumber } from '@/lib/useAnimatedNumber'
@@ -10,7 +11,7 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
-import { TrendingUp, TrendingDown, DollarSign, Target, CalendarClock, HeartPulse, PiggyBank, Smile, Meh, Frown, Plus, Trash2, CreditCard, Wallet, QrCode } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, Target, CalendarClock, HeartPulse, PiggyBank, Smile, Meh, Frown, Plus, Trash2, CreditCard, Wallet, QrCode, FileText, Rocket } from 'lucide-react'
 
 interface Goal {
   id: string
@@ -162,6 +163,8 @@ export default function DashboardPage() {
   const [totalBalanceInput, setTotalBalanceInput] = useState('')
   const [savingTotalBalance, setSavingTotalBalance] = useState(false)
   const [totalBalanceMessage, setTotalBalanceMessage] = useState('')
+  const [reportMessage, setReportMessage] = useState('')
+  const [exportingReport, setExportingReport] = useState(false)
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -317,6 +320,133 @@ export default function DashboardPage() {
     }
   }
 
+  async function handleExportPdfReport() {
+    setReportMessage('')
+    setExportingReport(true)
+
+    try {
+      const [{ jsPDF }] = await Promise.all([import('jspdf')])
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+      const pageWidth = doc.internal.pageSize.getWidth()
+      const marginX = 44
+      const contentWidth = pageWidth - marginX * 2
+      const now = new Date()
+      const generatedAt = now.toLocaleString('pt-BR')
+      const moodLabel = summary.family.mood === 'EXCELLENT'
+        ? 'Excelente'
+        : summary.family.mood === 'ATTENTION'
+          ? 'Atencao'
+          : 'Cuidado'
+
+      let y = 56
+
+      const writeLine = (label: string, value: string, addGap = 20) => {
+        doc.setFont('helvetica', 'bold')
+        doc.text(label, marginX, y)
+        doc.setFont('helvetica', 'normal')
+        doc.text(value, marginX + 180, y)
+        y += addGap
+      }
+
+      const ensureRoom = (requiredHeight = 26) => {
+        if (y + requiredHeight <= 780) return
+        doc.addPage()
+        y = 56
+      }
+
+      doc.setFillColor(15, 23, 42)
+      doc.roundedRect(marginX, 28, contentWidth, 88, 10, 10, 'F')
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(18)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Relatorio Financeiro', marginX + 16, 60)
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'normal')
+      doc.text(`Periodo: ${summary.currentMonth}`, marginX + 16, 82)
+      doc.text(`Gerado em: ${generatedAt}`, marginX + 16, 98)
+
+      y = 146
+      doc.setTextColor(22, 28, 36)
+      doc.setFontSize(13)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Resumo do periodo', marginX, y)
+      y += 24
+      doc.setFontSize(11)
+
+      writeLine('Saldo total:', formatCurrency(summary.balance.total))
+      writeLine('Entradas do mes:', formatCurrency(summary.cashFlow.income))
+      writeLine('Saidas do mes:', formatCurrency(summary.cashFlow.expenses))
+      writeLine('Lucro do mes:', formatCurrency(summary.cashFlow.profit))
+      writeLine('Humor financeiro:', moodLabel)
+      writeLine('A pagar:', formatCurrency(summary.payable.total))
+      writeLine('A receber:', formatCurrency(summary.receivable.total))
+
+      ensureRoom(48)
+      doc.setFontSize(13)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Top gastos', marginX, y)
+      y += 20
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'normal')
+
+      if (summary.family.topSpending.length === 0) {
+        doc.text('Sem gastos no periodo.', marginX, y)
+        y += 18
+      } else {
+        summary.family.topSpending.slice(0, 8).forEach((item, index) => {
+          ensureRoom()
+          doc.text(`${index + 1}. ${item.name}`, marginX, y)
+          doc.text(formatCurrency(item.amount), pageWidth - marginX, y, { align: 'right' })
+          y += 18
+        })
+      }
+
+      ensureRoom(48)
+      doc.setFontSize(13)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Categorias do mes', marginX, y)
+      y += 20
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'normal')
+
+      if (categories.length === 0) {
+        doc.text('Sem despesas categorizadas no periodo.', marginX, y)
+        y += 18
+      } else {
+        categories.slice(0, 10).forEach((cat: any, index: number) => {
+          ensureRoom()
+          doc.text(`${index + 1}. ${cat.name}`, marginX, y)
+          doc.text(formatCurrency(Number(cat.total || 0)), pageWidth - marginX, y, { align: 'right' })
+          y += 18
+        })
+      }
+
+      ensureRoom(48)
+      doc.setFontSize(13)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Evolucao (ultimos meses)', marginX, y)
+      y += 20
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'normal')
+
+      evolution.slice(-6).forEach((row: any) => {
+        ensureRoom()
+        doc.text(String(row.month || '-'), marginX, y)
+        doc.text(`Entradas ${formatCurrency(Number(row.income || 0))}`, marginX + 130, y)
+        doc.text(`Saidas ${formatCurrency(Number(row.expenses || 0))}`, marginX + 300, y)
+        y += 18
+      })
+
+      const fileStamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      doc.save(`relatorio-financeiro-${fileStamp}.pdf`)
+      setReportMessage('Relatorio PDF gerado com sucesso.')
+    } catch (error) {
+      setReportMessage('Nao foi possivel gerar o PDF agora. Tente novamente.')
+    } finally {
+      setExportingReport(false)
+    }
+  }
+
   async function handleChangePassword(e: React.FormEvent) {
     e.preventDefault()
     setAccountMessage('')
@@ -395,6 +525,25 @@ export default function DashboardPage() {
         <p className="text-cyan-100/70 text-xs tracking-[0.25em] uppercase">{weekday} • {summary.currentMonth}</p>
         <h1 className="text-3xl md:text-4xl font-black text-white mt-2 leading-tight">A IA que cuida da saude financeira da sua familia.</h1>
         <p className="text-slate-300 mt-3 text-sm md:text-base">Saldo disponivel agora: <span className="text-emerald-300 font-bold">{formatCurrency(summary.balance.total)}</span></p>
+        <div className="mt-4 flex flex-col sm:flex-row gap-2">
+          <Link
+            href="/dashboard/transactions"
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-400/35 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-200 px-4 py-2 text-sm font-semibold"
+          >
+            <Rocket size={16} />
+            Acesso rapido: Novo lancamento
+          </Link>
+          <button
+            type="button"
+            onClick={handleExportPdfReport}
+            disabled={exportingReport}
+            className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-400/35 bg-cyan-500/15 hover:bg-cyan-500/25 disabled:opacity-60 text-cyan-100 px-4 py-2 text-sm font-semibold"
+          >
+            <FileText size={16} />
+            {exportingReport ? 'Gerando PDF...' : 'Gerar relatorio em PDF'}
+          </button>
+        </div>
+        {reportMessage && <p className="text-xs text-slate-300 mt-2">{reportMessage}</p>}
         <form onSubmit={handleUpdateTotalBalance} className="mt-4 flex flex-col sm:flex-row gap-2 sm:items-center">
           <input
             type="text"
