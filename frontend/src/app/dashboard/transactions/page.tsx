@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react'
 import api from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
-import { Plus, Trash2, Search, CreditCard, Wallet, QrCode } from 'lucide-react'
+import { useToast } from '@/contexts/ToastContext'
+import { Plus, Trash2, Search, CreditCard, Wallet, QrCode, Loader } from 'lucide-react'
 
 interface Transaction {
   id: string; type: string; amount: number; description: string
@@ -29,6 +30,7 @@ const PAYMENT_METHOD_META: Record<string, { label: string; icon: any; className:
 const getPaymentMethodMeta = (method?: string) => PAYMENT_METHOD_META[method || 'CASH'] || PAYMENT_METHOD_META.CASH
 
 export default function TransactionsPage() {
+  const { addToast } = useToast()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -38,6 +40,7 @@ export default function TransactionsPage() {
   const [form, setForm] = useState({ type: 'EXPENSE', amount: '', description: '', categoryId: '', paymentMethod: 'CASH' })
   const [categories, setCategories] = useState<any[]>([])
   const [accounts, setAccounts] = useState<any[]>([])
+  const [saving, setSaving] = useState(false)
   const panelClass = 'dashboard-panel rounded-2xl border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.45)]'
   const selectedFormPayment = getPaymentMethodMeta(form.paymentMethod)
   const selectedFilterPayment = paymentMethodFilter ? getPaymentMethodMeta(paymentMethodFilter) : null
@@ -63,16 +66,40 @@ export default function TransactionsPage() {
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
-    await api.post('/dashboard/transactions', { ...form, accountId: accounts[0]?.id })
-    setShowForm(false)
-    setForm({ type: 'EXPENSE', amount: '', description: '', categoryId: '', paymentMethod: 'CASH' })
-    load()
+    if (!form.amount) {
+      addToast('Informe um valor para o lançamento.', 'warning')
+      return
+    }
+    if (!form.description) {
+      addToast('Descreva o lançamento para melhor identificação.', 'warning')
+      return
+    }
+
+    setSaving(true)
+    try {
+      await api.post('/dashboard/transactions', { ...form, accountId: accounts[0]?.id })
+      addToast(`${form.type === 'EXPENSE' ? 'Despesa' : 'Entrada'} registrada com sucesso!`, 'success')
+      setShowForm(false)
+      setForm({ type: 'EXPENSE', amount: '', description: '', categoryId: '', paymentMethod: 'CASH' })
+      load()
+    } catch (err: any) {
+      addToast(err.response?.data?.error || 'Erro ao salvar lançamento.', 'error')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Remover este lançamento?')) return
-    await api.delete(`/dashboard/transactions/${id}`)
-    load()
+    const confirmed = window.confirm('Deseja remover este lançamento?')
+    if (!confirmed) return
+    
+    try {
+      await api.delete(`/dashboard/transactions/${id}`)
+      addToast('Lançamento removido com sucesso.', 'success')
+      load()
+    } catch (err: any) {
+      addToast(err.response?.data?.error || 'Erro ao remover lançamento.', 'error')
+    }
   }
 
   return (
@@ -139,7 +166,10 @@ export default function TransactionsPage() {
             </div>
           </div>
           <div className="flex items-end gap-2">
-            <button type="submit" className="bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-semibold px-4 py-2 rounded-lg">Salvar</button>
+            <button type="submit" disabled={saving} className="bg-cyan-400 hover:bg-cyan-300 disabled:opacity-60 text-slate-950 font-semibold px-4 py-2 rounded-lg flex items-center gap-2">
+              {saving && <Loader size={16} className="animate-spin" />}
+              {saving ? 'Salvando...' : 'Salvar'}
+            </button>
             <button type="button" onClick={() => setShowForm(false)} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg">Cancelar</button>
           </div>
         </form>

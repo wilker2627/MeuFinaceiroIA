@@ -6,6 +6,7 @@ import api from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import { useAnimatedNumber } from '@/lib/useAnimatedNumber'
 import AnimatedCurrency from '@/components/AnimatedCurrency'
+import OnboardingGuide from '@/components/OnboardingGuide'
 import { useAuth } from '@/contexts/AuthContext'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
@@ -678,6 +679,7 @@ export default function DashboardPage() {
 
   return (
     <div className="relative min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+      <OnboardingGuide />
       {/* Animated Background */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-40 -left-28 h-96 w-96 rounded-full bg-cyan-500/8 blur-3xl animate-pulse" style={{ animationDuration: '8s' }} />
