@@ -683,28 +683,28 @@ export default function DashboardPage() {
     CAREFUL: { label: 'Cuidado', Icon: Frown, color: 'text-rose-400', detail: 'Despesas acima do ideal.' }
   }
   const mood = moodMap[summary.family.mood]
-  const panelClass = 'dashboard-panel rounded-2xl border border-cyan-200/70 bg-white/85 backdrop-blur-xl shadow-[0_12px_30px_rgba(14,116,144,0.15)]'
+  const panelClass = 'dashboard-panel rounded-2xl border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.45)]'
 
   // Componente de Card de Estatística Premium
   const PremiumStatCard = ({ label, value, icon: Icon, color, trend }: any) => {
     const colorClasses = {
-      green: 'from-emerald-200/70 to-emerald-100/50 border-emerald-300/80 text-emerald-700',
-      blue: 'from-sky-200/70 to-sky-100/50 border-sky-300/80 text-sky-700',
-      red: 'from-rose-200/70 to-rose-100/50 border-rose-300/80 text-rose-700',
-      cyan: 'from-cyan-200/70 to-cyan-100/50 border-cyan-300/80 text-cyan-700'
+      green: 'from-emerald-500/20 to-emerald-400/5 border-emerald-500/30 text-emerald-400',
+      blue: 'from-blue-500/20 to-blue-400/5 border-blue-500/30 text-blue-400',
+      red: 'from-red-500/20 to-red-400/5 border-red-500/30 text-red-400',
+      cyan: 'from-cyan-500/20 to-cyan-400/5 border-cyan-500/30 text-cyan-400'
     }
     const classes = colorClasses[color as keyof typeof colorClasses] || colorClasses.cyan
     
     return (
       <div className={`bg-gradient-to-br ${classes} border rounded-xl p-4 md:p-6 backdrop-blur transition-all hover:border-opacity-100 duration-300`}>
         <div className="flex items-start justify-between mb-3">
-          <div className="p-2.5 bg-white/70 rounded-lg">
+          <div className="p-2.5 bg-white/5 rounded-lg">
             <Icon size={20} className="opacity-80" />
           </div>
-          {trend && <span className={`text-xs font-semibold px-2 py-1 rounded-full ${trend > 0 ? 'text-emerald-700 bg-emerald-100' : 'text-rose-700 bg-rose-100'}`}>{trend > 0 ? '↑' : '↓'} {Math.abs(trend)}%</span>}
+          {trend && <span className={`text-xs font-semibold px-2 py-1 rounded-full ${trend > 0 ? 'text-emerald-400 bg-emerald-500/20' : 'text-red-400 bg-red-500/20'}`}>{trend > 0 ? '↑' : '↓'} {Math.abs(trend)}%</span>}
         </div>
-        <p className="text-xs text-slate-600 font-medium tracking-wide mb-1">{label}</p>
-        <p className="text-2xl md:text-3xl font-black text-slate-900">
+        <p className="text-xs text-white/60 font-medium tracking-wide mb-1">{label}</p>
+        <p className="text-2xl md:text-3xl font-black text-white">
           <AnimatedCurrency value={value} />
         </p>
       </div>
@@ -712,31 +712,31 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-sky-50 via-cyan-50 to-emerald-50">
+    <div className="relative min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
       <OnboardingGuide />
       {/* Animated Background */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-40 -left-28 h-96 w-96 rounded-full bg-cyan-400/20 blur-3xl animate-pulse" style={{ animationDuration: '8s' }} />
-        <div className="absolute top-1/3 -right-32 h-[28rem] w-[28rem] rounded-full bg-emerald-400/20 blur-3xl animate-pulse" style={{ animationDuration: '10s', animationDelay: '2s' }} />
-        <div className="absolute bottom-0 left-1/2 h-80 w-80 rounded-full bg-sky-400/20 blur-3xl animate-pulse" style={{ animationDuration: '12s', animationDelay: '4s' }} />
+        <div className="absolute -top-40 -left-28 h-96 w-96 rounded-full bg-cyan-500/8 blur-3xl animate-pulse" style={{ animationDuration: '8s' }} />
+        <div className="absolute top-1/3 -right-32 h-[28rem] w-[28rem] rounded-full bg-emerald-500/6 blur-3xl animate-pulse" style={{ animationDuration: '10s', animationDelay: '2s' }} />
+        <div className="absolute bottom-0 left-1/2 h-80 w-80 rounded-full bg-blue-500/5 blur-3xl animate-pulse" style={{ animationDuration: '12s', animationDelay: '4s' }} />
       </div>
 
       <div className="relative p-4 md:p-8">
         <div className="max-w-[1400px] mx-auto space-y-6">
           
           {/* Hero Section - Redesigned */}
-          <div className="rounded-3xl p-6 md:p-8 border border-cyan-200/70 bg-gradient-to-br from-white/95 via-cyan-50/90 to-emerald-50/90 backdrop-blur-xl shadow-[0_20px_60px_rgba(14,116,144,0.15)]">
+          <div className="rounded-3xl p-6 md:p-8 border border-cyan-500/20 bg-gradient-to-br from-slate-900/80 via-cyan-950/30 to-slate-900/80 backdrop-blur-xl shadow-[0_20px_60px_rgba(6,182,212,0.1)]">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
               <div className="flex-1">
-                <div className="inline-block mb-3 px-3 py-1 bg-cyan-100 border border-cyan-200 rounded-full">
-                  <p className="text-cyan-700 text-xs font-semibold tracking-wider uppercase">{weekday} • {summary.currentMonth}</p>
+                <div className="inline-block mb-3 px-3 py-1 bg-cyan-500/15 border border-cyan-500/30 rounded-full">
+                  <p className="text-cyan-300 text-xs font-semibold tracking-wider uppercase">{weekday} • {summary.currentMonth}</p>
                 </div>
-                <h1 className="text-4xl md:text-5xl font-black text-slate-900 mt-3 leading-tight">
+                <h1 className="text-4xl md:text-5xl font-black text-white mt-3 leading-tight">
                   Bem-vindo ao seu Financeiro
                 </h1>
-                <p className="text-slate-600 mt-4 text-base">Seu saldo disponivel agora e de <span className="text-emerald-700 font-bold text-lg">{formatCurrency(summary.balance.total)}</span></p>
+                <p className="text-slate-300 mt-4 text-base">Seu saldo disponivel agora e de <span className="text-emerald-300 font-bold text-lg">{formatCurrency(summary.balance.total)}</span></p>
               </div>
-              <div className={`flex items-center justify-center w-32 h-32 rounded-2xl ${mood.color} bg-gradient-to-br from-white to-cyan-50 border border-cyan-100`}>
+              <div className={`flex items-center justify-center w-32 h-32 rounded-2xl ${mood.color} bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10`}>
                 <div className="text-center">
                   <mood.Icon size={48} className="mx-auto mb-2" />
                   <p className="text-sm font-bold">{mood.label}</p>
@@ -772,7 +772,7 @@ export default function DashboardPage() {
                   value={totalBalanceInput}
                   onChange={(e) => setTotalBalanceInput(e.target.value)}
                   placeholder="Ajustar saldo (ex: 1250,50)"
-                  className="flex-1 bg-white border border-cyan-200 text-slate-900 rounded-lg px-4 py-2.5 text-sm placeholder-slate-400 focus:border-cyan-500/60 focus:outline-none transition"
+                  className="flex-1 bg-slate-800/50 border border-cyan-700/30 text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-400 focus:border-cyan-500/60 focus:outline-none transition"
                 />
                 <button
                   type="submit"
@@ -785,7 +785,7 @@ export default function DashboardPage() {
               <select
                 value={reportPeriod}
                 onChange={(e) => setReportPeriod(e.target.value as ReportPeriod)}
-                className="bg-white border border-cyan-200 text-slate-700 rounded-lg px-3 py-2.5 text-sm focus:border-cyan-500/60 focus:outline-none transition"
+                className="bg-slate-800/50 border border-cyan-700/30 text-cyan-100 rounded-lg px-3 py-2.5 text-sm focus:border-cyan-500/60 focus:outline-none transition"
               >
                 <option value="CURRENT_MONTH">Mês atual</option>
                 <option value="LAST_3_MONTHS">3 últimos meses</option>
@@ -793,14 +793,14 @@ export default function DashboardPage() {
               </select>
             </div>
 
-            <div className="mt-5 rounded-2xl border border-cyan-200 bg-white/90 p-4">
+            <div className="mt-5 rounded-2xl border border-cyan-500/20 bg-slate-900/60 p-4">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
-                  <p className="text-sm font-bold text-slate-800">Foto da Familia</p>
-                  <p className="text-xs text-slate-500">Deixe o app com a cara da sua casa.</p>
+                  <p className="text-sm font-bold text-white">Foto da Familia</p>
+                  <p className="text-xs text-slate-400">Deixe o app com a cara da sua casa.</p>
                 </div>
                 <div className="flex gap-2">
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-cyan-300 bg-cyan-50 px-3 py-2 text-xs font-semibold text-cyan-700 hover:bg-cyan-100 transition-colors">
+                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/20 transition-colors">
                     <Upload size={14} />
                     Enviar foto
                     <input type="file" accept="image/*" onChange={handleFamilyPhotoChange} className="hidden" />
@@ -818,11 +818,11 @@ export default function DashboardPage() {
                 </div>
               </div>
               {familyPhoto ? (
-                <div className="mt-4 overflow-hidden rounded-xl border border-cyan-200">
+                <div className="mt-4 overflow-hidden rounded-xl border border-cyan-500/30">
                   <img src={familyPhoto} alt="Foto da familia" className="h-56 w-full object-cover" />
                 </div>
               ) : (
-                <div className="mt-4 rounded-xl border border-dashed border-cyan-300 bg-cyan-50/60 p-6 text-center text-sm text-slate-500">
+                <div className="mt-4 rounded-xl border border-dashed border-cyan-500/30 bg-cyan-500/5 p-6 text-center text-sm text-slate-400">
                   Nenhuma foto selecionada ainda.
                 </div>
               )}
@@ -861,14 +861,14 @@ export default function DashboardPage() {
 
           {/* Health & Goal Section */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className={`lg:col-span-1 p-6 rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-100/70 to-white backdrop-blur`}>
+            <div className={`lg:col-span-1 p-6 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-slate-900 backdrop-blur`}>
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 bg-emerald-500/20 rounded-lg">
                   <HeartPulse size={18} className="text-emerald-400" />
                 </div>
-                <h2 className="text-sm font-bold text-slate-900">Saude Financeira</h2>
+                <h2 className="text-sm font-bold text-white">Saude Financeira</h2>
               </div>
-              <div className="space-y-2 text-xs text-slate-700">
+              <div className="space-y-2 text-xs text-slate-300">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${summary.family.health.allBillsUpToDate ? 'bg-emerald-400' : 'bg-red-400'}`} />
                   {summary.family.health.allBillsUpToDate ? 'Contas em dia' : `${summary.family.health.overdueCount} atrasadas`}
@@ -880,49 +880,49 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className={`lg:col-span-1 p-6 rounded-2xl border border-sky-200 bg-gradient-to-br from-sky-100/70 to-white backdrop-blur`}>
+            <div className={`lg:col-span-1 p-6 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-slate-900 backdrop-blur`}>
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 bg-blue-500/20 rounded-lg">
                   <Target size={18} className="text-blue-400" />
                 </div>
-                <h2 className="text-sm font-bold text-slate-900">Objetivo</h2>
+                <h2 className="text-sm font-bold text-white">Objetivo</h2>
               </div>
               {summary.family.goal ? (
                 <div className="space-y-2">
-                  <p className="text-slate-900 font-semibold text-sm">{summary.family.goal.name}</p>
-                  <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                  <p className="text-white font-semibold text-sm">{summary.family.goal.name}</p>
+                  <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400" style={{ width: `${Math.min(summary.family.goal.progress, 100).toFixed(0)}%` }} />
                   </div>
-                  <p className="text-xs text-slate-600">{summary.family.goal.progress.toFixed(0)}% • Faltam {formatCurrency(summary.family.goal.remaining)}</p>
+                  <p className="text-xs text-slate-400">{summary.family.goal.progress.toFixed(0)}% • Faltam {formatCurrency(summary.family.goal.remaining)}</p>
                 </div>
               ) : (
-                <p className="text-xs text-slate-600">Crie uma meta para acompanhar</p>
+                <p className="text-xs text-slate-400">Crie uma meta para acompanhar</p>
               )}
             </div>
 
-            <div className={`lg:col-span-1 p-6 rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-100/70 to-white backdrop-blur`}>
+            <div className={`lg:col-span-1 p-6 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-slate-900 backdrop-blur`}>
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 bg-emerald-500/20 rounded-lg">
                   <PiggyBank size={18} className="text-emerald-400" />
                 </div>
-                <h2 className="text-sm font-bold text-slate-900">Poupanca</h2>
+                <h2 className="text-sm font-bold text-white">Poupanca</h2>
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-xs text-slate-600">Economizado</span>
+                  <span className="text-xs text-slate-400">Economizado</span>
                   <span className="text-sm font-bold text-emerald-400">{formatCurrency(summary.family.savings.saved)}</span>
                 </div>
-                <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
+                <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400" style={{ width: `${Math.min(summary.family.savings.progress, 100).toFixed(0)}%` }} />
                 </div>
-                <p className="text-xs text-slate-600">Meta: {formatCurrency(summary.family.savings.target)}</p>
+                <p className="text-xs text-slate-400">Meta: {formatCurrency(summary.family.savings.target)}</p>
               </div>
             </div>
           </div>
 
           {/* Charts Section */}
-          <div className={`p-6 rounded-2xl border border-cyan-200 bg-white/85 backdrop-blur`}>
-            <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+          <div className={`p-6 rounded-2xl border border-cyan-500/20 bg-slate-900/50 backdrop-blur`}>
+            <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
               <div className="w-1 h-6 bg-gradient-to-b from-cyan-500 to-cyan-600 rounded-full" />
               Evolução Mensal
             </h2>
