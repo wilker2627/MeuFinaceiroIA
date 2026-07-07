@@ -4,7 +4,11 @@ import { useEffect, useState } from 'react'
 import api from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
-import { Plus, Trash2, Search, CreditCard, Wallet, QrCode, Loader } from 'lucide-react'
+import { Plus, Trash2, Search, CreditCard, Wallet, QrCode, Loader, AlertCircle } from 'lucide-react'
+import ConfirmModal from '@/components/ConfirmModal'
+import EmptyState, { LoadingSkeleton } from '@/components/EmptyState'
+import ExportData from '@/components/ExportData'
+import { validateAmount, validateDescription } from '@/lib/exportUtils'
 
 interface Transaction {
   id: string; type: string; amount: number; description: string
@@ -38,9 +42,12 @@ export default function TransactionsPage() {
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ type: 'EXPENSE', amount: '', description: '', categoryId: '', paymentMethod: 'CASH' })
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [categories, setCategories] = useState<any[]>([])
   const [accounts, setAccounts] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; txId: string | null }>({ open: false, txId: null })
+  const [deleting, setDeleting] = useState(false)
   const panelClass = 'dashboard-panel rounded-2xl border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.45)]'
   const selectedFormPayment = getPaymentMethodMeta(form.paymentMethod)
   const selectedFilterPayment = paymentMethodFilter ? getPaymentMethodMeta(paymentMethodFilter) : null
@@ -66,15 +73,21 @@ export default function TransactionsPage() {
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
-    if (!form.amount) {
-      addToast('Informe um valor para o lançamento.', 'warning')
+    
+    // Validar
+    const errors: Record<string, string> = {}
+    const amountValidation = validateAmount(form.amount)
+    const descriptionValidation = validateDescription(form.description)
+    
+    if (!amountValidation.valid) errors.amount = amountValidation.error || ''
+    if (!descriptionValidation.valid) errors.description = descriptionValidation.error || ''
+    
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors)
       return
     }
-    if (!form.description) {
-      addToast('Descreva o lançamento para melhor identificação.', 'warning')
-      return
-    }
-
+    
+    setFormErrors({})
     setSaving(true)
     try {
       await api.post('/dashboard/transactions', { ...form, accountId: accounts[0]?.id })
@@ -89,16 +102,19 @@ export default function TransactionsPage() {
     }
   }
 
-  async function handleDelete(id: string) {
-    const confirmed = window.confirm('Deseja remover este lançamento?')
-    if (!confirmed) return
+  async function handleDeleteConfirm() {
+    if (!deleteConfirm.txId) return
     
+    setDeleting(true)
     try {
-      await api.delete(`/dashboard/transactions/${id}`)
+      await api.delete(`/dashboard/transactions/${deleteConfirm.txId}`)
       addToast('Lançamento removido com sucesso.', 'success')
+      setDeleteConfirm({ open: false, txId: null })
       load()
     } catch (err: any) {
       addToast(err.response?.data?.error || 'Erro ao remover lançamento.', 'error')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -135,13 +151,35 @@ export default function TransactionsPage() {
           </div>
           <div>
             <label className="text-gray-400 text-sm block mb-1">Valor (R$)</label>
-            <input type="number" step="0.01" required value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
-              className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2" placeholder="0,00" />
+            <input type="number" step="0.01" required value={form.amount} onChange={e => {
+              setForm(p => ({ ...p, amount: e.target.value }))
+              if (e.target.value) {
+                const validation = validateAmount(e.target.value)
+                if (!validation.valid) {
+                  setFormErrors(p => ({ ...p, amount: validation.error || '' }))
+                } else {
+                  setFormErrors(p => ({ ...p, amount: '' }))
+                }
+              }
+            }}
+              className={`w-full bg-slate-950 border ${formErrors.amount ? 'border-rose-500' : 'border-cyan-500/20'} text-white rounded-lg px-3 py-2`} placeholder="0,00" />
+            {formErrors.amount && <p className="text-rose-400 text-xs mt-1">{formErrors.amount}</p>}
           </div>
           <div className="col-span-2">
             <label className="text-gray-400 text-sm block mb-1">Descrição</label>
-            <input type="text" required value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
-              className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2" placeholder="Ex: Gasolina" />
+            <input type="text" required value={form.description} onChange={e => {
+              setForm(p => ({ ...p, description: e.target.value }))
+              if (e.target.value) {
+                const validation = validateDescription(e.target.value)
+                if (!validation.valid) {
+                  setFormErrors(p => ({ ...p, description: validation.error || '' }))
+                } else {
+                  setFormErrors(p => ({ ...p, description: '' }))
+                }
+              }
+            }}
+              className={`w-full bg-slate-950 border ${formErrors.description ? 'border-rose-500' : 'border-cyan-500/20'} text-white rounded-lg px-3 py-2`} placeholder="Ex: Gasolina" />
+            {formErrors.description && <p className="text-rose-400 text-xs mt-1">{formErrors.description}</p>}
           </div>
           <div>
             <label className="text-gray-400 text-sm block mb-1">Categoria</label>
@@ -170,7 +208,7 @@ export default function TransactionsPage() {
               {saving && <Loader size={16} className="animate-spin" />}
               {saving ? 'Salvando...' : 'Salvar'}
             </button>
-            <button type="button" onClick={() => setShowForm(false)} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg">Cancelar</button>
+            <button type="button" onClick={() => { setShowForm(false); setFormErrors({}) }} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg">Cancelar</button>
           </div>
         </form>
       )}
@@ -197,55 +235,92 @@ export default function TransactionsPage() {
           ))}
         </select>
         {selectedFilterPayment && <PaymentMethodChip meta={selectedFilterPayment} />}
+        <ExportData
+          data={transactions}
+          columns={[
+            { key: 'description', label: 'Descrição' },
+            { key: 'type', label: 'Tipo' },
+            { key: 'amount', label: 'Valor' },
+            { key: 'date', label: 'Data' },
+            { key: 'paymentMethod', label: 'Pagamento' },
+          ]}
+          filename="lançamentos"
+        />
       </div>
 
       {/* Tabela */}
       <div className={`${panelClass} overflow-hidden`}>
-        <table className="w-full text-sm">
-          <thead className="bg-slate-950/80 text-slate-400">
-            <tr>
-              <th className="text-left px-6 py-3">Descrição</th>
-              <th className="text-left px-4 py-3">Categoria</th>
-              <th className="text-left px-4 py-3">Pagamento</th>
-              <th className="text-left px-4 py-3">Responsável</th>
-              <th className="text-left px-4 py-3">Data</th>
-              <th className="text-right px-6 py-3">Valor</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={7} className="text-center text-slate-500 py-12">Carregando...</td></tr>
-            ) : transactions.length === 0 ? (
-              <tr><td colSpan={7} className="text-center text-slate-500 py-12">Nenhum lançamento encontrado</td></tr>
-            ) : transactions.map(tx => (
-              <tr key={tx.id} className="border-t border-cyan-500/15 hover:bg-cyan-500/5 transition-colors">
-                <td className="px-6 py-4 text-white">{tx.description}</td>
-                <td className="px-4 py-4">
-                  {tx.category ? (
-                    <span className="px-2 py-1 rounded-full text-xs text-white" style={{ backgroundColor: tx.category.color + '40', color: tx.category.color }}>
-                      {tx.category.name}
-                    </span>
-                  ) : <span className="text-slate-600">—</span>}
-                </td>
-                <td className="px-4 py-4 text-slate-300 text-xs">
-                  <PaymentMethodChip meta={getPaymentMethodMeta(tx.paymentMethod)} />
-                </td>
-                <td className="px-4 py-4 text-slate-400">{tx.user?.name || '—'}</td>
-                <td className="px-4 py-4 text-slate-400">{formatDate(tx.date)}</td>
-                <td className={`px-6 py-4 text-right font-semibold ${tx.type === 'INCOME' ? 'text-green-400' : 'text-red-400'}`}>
-                  {tx.type === 'INCOME' ? '+' : '-'}{formatCurrency(tx.amount)}
-                </td>
-                <td className="px-4 py-4">
-                  <button onClick={() => handleDelete(tx.id)} className="text-slate-600 hover:text-red-400 transition-colors">
-                    <Trash2 size={16} />
-                  </button>
-                </td>
+        {loading ? (
+          <div className="p-6">
+            <LoadingSkeleton />
+          </div>
+        ) : transactions.length === 0 ? (
+          <EmptyState
+            title="Nenhum lançamento encontrado"
+            description={search || typeFilter || paymentMethodFilter 
+              ? "Tente ajustar os filtros para encontrar o que você procura"
+              : "Comece adicionando suas primeiras entradas e saídas"}
+            action={{
+              label: 'Novo Lançamento',
+              onClick: () => setShowForm(true),
+            }}
+          />
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="bg-slate-950/80 text-slate-400">
+              <tr>
+                <th className="text-left px-6 py-3">Descrição</th>
+                <th className="text-left px-4 py-3">Categoria</th>
+                <th className="text-left px-4 py-3">Pagamento</th>
+                <th className="text-left px-4 py-3">Responsável</th>
+                <th className="text-left px-4 py-3">Data</th>
+                <th className="text-right px-6 py-3">Valor</th>
+                <th className="px-4 py-3"></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {transactions.map(tx => (
+                <tr key={tx.id} className="border-t border-cyan-500/15 hover:bg-cyan-500/5 transition-colors">
+                  <td className="px-6 py-4 text-white">{tx.description}</td>
+                  <td className="px-4 py-4">
+                    {tx.category ? (
+                      <span className="px-2 py-1 rounded-full text-xs text-white" style={{ backgroundColor: tx.category.color + '40', color: tx.category.color }}>
+                        {tx.category.name}
+                      </span>
+                    ) : <span className="text-slate-600">—</span>}
+                  </td>
+                  <td className="px-4 py-4 text-slate-300 text-xs">
+                    <PaymentMethodChip meta={getPaymentMethodMeta(tx.paymentMethod)} />
+                  </td>
+                  <td className="px-4 py-4 text-slate-400">{tx.user?.name || '—'}</td>
+                  <td className="px-4 py-4 text-slate-400">{formatDate(tx.date)}</td>
+                  <td className={`px-6 py-4 text-right font-semibold ${tx.type === 'INCOME' ? 'text-green-400' : 'text-red-400'}`}>
+                    {tx.type === 'INCOME' ? '+' : '-'}{formatCurrency(tx.amount)}
+                  </td>
+                  <td className="px-4 py-4">
+                    <button onClick={() => setDeleteConfirm({ open: true, txId: tx.id })} className="text-slate-600 hover:text-red-400 transition-colors">
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
+
+      {/* Modal de confirmação de delete */}
+      <ConfirmModal
+        isOpen={deleteConfirm.open}
+        title="Remover Lançamento"
+        message="Tem certeza que deseja remover este lançamento? Esta ação não pode ser desfeita."
+        confirmText="Remover"
+        cancelText="Cancelar"
+        isDestructive
+        isLoading={deleting}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteConfirm({ open: false, txId: null })}
+      />
       </div>
     </div>
   )

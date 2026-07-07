@@ -23,6 +23,25 @@
   }
 }
 
+/* Light mode */
+html.light {
+  color-scheme: light;
+  background: linear-gradient(135deg, #f5f7fa 0%, #f0f4f8 100%);
+}
+
+html.light body {
+  background:
+    radial-gradient(circle at 12% 12%, rgba(59, 130, 246, 0.05), transparent 34%),
+    radial-gradient(circle at 88% 24%, rgba(16, 185, 129, 0.04), transparent 30%),
+    #f5f7fa;
+  color: #1f2937;
+}
+
+/* Dark mode (default) */
+html.dark {
+  color-scheme: dark;
+}
+
 html {
   width: 100%;
   height: 100%;
