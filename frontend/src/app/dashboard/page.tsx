@@ -1,4 +1,4 @@
-﻿'use client'
+'use client'
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -15,7 +15,7 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
-import { TrendingUp, TrendingDown, DollarSign, Target, CalendarClock, HeartPulse, PiggyBank, Smile, Meh, Frown, Plus, Trash2, CreditCard, Wallet, QrCode, FileText, Rocket, Upload, X } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, Target, CalendarClock, HeartPulse, PiggyBank, Smile, Meh, Frown, Plus, Trash2, CreditCard, Wallet, QrCode, FileText, Rocket } from 'lucide-react'
 
 interface Goal {
   id: string
@@ -146,7 +146,6 @@ const PAYMENT_METHOD_META: Record<string, { label: string; icon: any; className:
 const getPaymentMethodMeta = (method?: string) => PAYMENT_METHOD_META[method || 'CASH'] || PAYMENT_METHOD_META.CASH
 
 const COLORS = ['#22c55e','#3b82f6','#f97316','#a855f7','#ec4899','#eab308','#14b8a6','#ef4444']
-const FAMILY_PHOTO_KEY = 'family_photo_v1'
 
 export default function DashboardPage() {
   const { logout } = useAuth()
@@ -177,7 +176,6 @@ export default function DashboardPage() {
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [familyPhoto, setFamilyPhoto] = useState('')
 
   function parseCurrencyInput(value: string) {
     const cleaned = String(value || '').replace(/\s/g, '').replace(/R\$/gi, '')
@@ -216,35 +214,6 @@ export default function DashboardPage() {
     }
     load()
   }, [])
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return
-    const savedPhoto = localStorage.getItem(FAMILY_PHOTO_KEY) || ''
-    setFamilyPhoto(savedPhoto)
-  }, [])
-
-  function handleFamilyPhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (!file.type.startsWith('image/')) return
-
-    const reader = new FileReader()
-    reader.onload = () => {
-      const base64 = String(reader.result || '')
-      setFamilyPhoto(base64)
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(FAMILY_PHOTO_KEY, base64)
-      }
-    }
-    reader.readAsDataURL(file)
-  }
-
-  function handleFamilyPhotoRemove() {
-    setFamilyPhoto('')
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(FAMILY_PHOTO_KEY)
-    }
-  }
 
   async function reloadSummary() {
     const { data } = await api.get('/dashboard/summary')
@@ -509,7 +478,7 @@ export default function DashboardPage() {
       doc.text('Este documento resume fluxo de caixa, gastos e indicadores de saude financeira.', 46, 272)
       doc.text('Use como apoio para decisoes de curto e medio prazo da familia.', 46, 292)
       doc.setTextColor(148, 163, 184)
-      doc.text('FinanceiroAI â€¢ Relatorio confidencial', 46, pageHeight - 44)
+      doc.text('FinanceiroAI • Relatorio confidencial', 46, pageHeight - 44)
 
       // Conteudo
       doc.addPage()
@@ -669,7 +638,7 @@ export default function DashboardPage() {
 
   if (loading) return (
     <div className="flex items-center justify-center h-full">
-      <p className="text-slate-500">Carregando dashboard...</p>
+      <p className="text-gray-400">Carregando dashboard...</p>
     </div>
   )
 
@@ -678,14 +647,14 @@ export default function DashboardPage() {
   const now = new Date()
   const weekday = now.toLocaleDateString('pt-BR', { weekday: 'long' })
   const moodMap = {
-    EXCELLENT: { label: 'Excelente', Icon: Smile, color: 'text-emerald-400', detail: 'VocÃªs estÃ£o no caminho certo.' },
-    ATTENTION: { label: 'AtenÃ§Ã£o', Icon: Meh, color: 'text-amber-400', detail: 'Vale atenÃ§Ã£o em alguns gastos.' },
+    EXCELLENT: { label: 'Excelente', Icon: Smile, color: 'text-emerald-400', detail: 'Vocês estão no caminho certo.' },
+    ATTENTION: { label: 'Atenção', Icon: Meh, color: 'text-amber-400', detail: 'Vale atenção em alguns gastos.' },
     CAREFUL: { label: 'Cuidado', Icon: Frown, color: 'text-rose-400', detail: 'Despesas acima do ideal.' }
   }
   const mood = moodMap[summary.family.mood]
-  const panelClass = 'dashboard-panel rounded-2xl border border-slate-200 bg-white/85 backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.45)]'
+  const panelClass = 'dashboard-panel rounded-2xl border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.45)]'
 
-  // Componente de Card de EstatÃ­stica Premium
+  // Componente de Card de Estatística Premium
   const PremiumStatCard = ({ label, value, icon: Icon, color, trend }: any) => {
     const colorClasses = {
       green: 'from-emerald-500/20 to-emerald-400/5 border-emerald-500/30 text-emerald-400',
@@ -701,10 +670,10 @@ export default function DashboardPage() {
           <div className="p-2.5 bg-white/5 rounded-lg">
             <Icon size={20} className="opacity-80" />
           </div>
-          {trend && <span className={`text-xs font-semibold px-2 py-1 rounded-full ${trend > 0 ? 'text-emerald-400 bg-emerald-500/20' : 'text-red-400 bg-red-500/20'}`}>{trend > 0 ? 'â†‘' : 'â†“'} {Math.abs(trend)}%</span>}
+          {trend && <span className={`text-xs font-semibold px-2 py-1 rounded-full ${trend > 0 ? 'text-emerald-400 bg-emerald-500/20' : 'text-red-400 bg-red-500/20'}`}>{trend > 0 ? '↑' : '↓'} {Math.abs(trend)}%</span>}
         </div>
-        <p className="text-xs text-slate-900/60 font-medium tracking-wide mb-1">{label}</p>
-        <p className="text-2xl md:text-3xl font-black text-slate-900">
+        <p className="text-xs text-white/60 font-medium tracking-wide mb-1">{label}</p>
+        <p className="text-2xl md:text-3xl font-black text-white">
           <AnimatedCurrency value={value} />
         </p>
       </div>
@@ -712,7 +681,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-slate-950 via-slate-50 to-slate-100">
+    <div className="relative min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
       <OnboardingGuide />
       {/* Animated Background */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -725,18 +694,18 @@ export default function DashboardPage() {
         <div className="max-w-[1400px] mx-auto space-y-6">
           
           {/* Hero Section - Redesigned */}
-          <div className="rounded-3xl p-6 md:p-8 border border-slate-200 bg-gradient-to-br from-white via-cyan-950/30 to-slate-100 backdrop-blur-xl shadow-[0_20px_60px_rgba(6,182,212,0.1)]">
+          <div className="rounded-3xl p-6 md:p-8 border border-cyan-500/20 bg-gradient-to-br from-slate-900/80 via-cyan-950/30 to-slate-900/80 backdrop-blur-xl shadow-[0_20px_60px_rgba(6,182,212,0.1)]">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
               <div className="flex-1">
                 <div className="inline-block mb-3 px-3 py-1 bg-cyan-500/15 border border-cyan-500/30 rounded-full">
-                  <p className="text-cyan-300 text-xs font-semibold tracking-wider uppercase">{weekday} â€¢ {summary.currentMonth}</p>
+                  <p className="text-cyan-300 text-xs font-semibold tracking-wider uppercase">{weekday} • {summary.currentMonth}</p>
                 </div>
-                <h1 className="text-4xl md:text-5xl font-black text-slate-900 mt-3 leading-tight">
+                <h1 className="text-4xl md:text-5xl font-black text-white mt-3 leading-tight">
                   Bem-vindo ao seu Financeiro
                 </h1>
-                <p className="text-slate-600 mt-4 text-base">Seu saldo disponivel agora e de <span className="text-emerald-300 font-bold text-lg">{formatCurrency(summary.balance.total)}</span></p>
+                <p className="text-slate-300 mt-4 text-base">Seu saldo disponível agora é de <span className="text-emerald-300 font-bold text-lg">{formatCurrency(summary.balance.total)}</span></p>
               </div>
-              <div className={`flex items-center justify-center w-32 h-32 rounded-2xl ${mood.color} bg-gradient-to-br from-white to-slate-100 border border-white/10`}>
+              <div className={`flex items-center justify-center w-32 h-32 rounded-2xl ${mood.color} bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10`}>
                 <div className="text-center">
                   <mood.Icon size={48} className="mx-auto mb-2" />
                   <p className="text-sm font-bold">{mood.label}</p>
@@ -751,7 +720,7 @@ export default function DashboardPage() {
                 className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-gradient-to-r from-emerald-500/20 to-emerald-400/10 hover:border-emerald-400/60 hover:from-emerald-500/30 transition text-emerald-200 px-4 py-3 text-sm font-semibold"
               >
                 <Plus size={18} />
-                Novo LanÃ§amento
+                Novo Lançamento
               </Link>
               <button
                 type="button"
@@ -760,7 +729,7 @@ export default function DashboardPage() {
                 className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/40 bg-gradient-to-r from-cyan-500/20 to-cyan-400/10 hover:border-cyan-400/60 hover:from-cyan-500/30 transition disabled:opacity-50 text-cyan-100 px-4 py-3 text-sm font-semibold"
               >
                 <FileText size={18} />
-                {exportingReport ? 'Gerando...' : 'RelatÃ³rio PDF'}
+                {exportingReport ? 'Gerando...' : 'Relatório PDF'}
               </button>
             </div>
 
@@ -772,7 +741,7 @@ export default function DashboardPage() {
                   value={totalBalanceInput}
                   onChange={(e) => setTotalBalanceInput(e.target.value)}
                   placeholder="Ajustar saldo (ex: 1250,50)"
-                  className="flex-1 bg-white border border-slate-200 text-slate-900 rounded-lg px-4 py-2.5 text-sm placeholder-slate-400 focus:border-cyan-500/60 focus:outline-none transition"
+                  className="flex-1 bg-slate-800/50 border border-cyan-700/30 text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-400 focus:border-cyan-500/60 focus:outline-none transition"
                 />
                 <button
                   type="submit"
@@ -785,160 +754,15 @@ export default function DashboardPage() {
               <select
                 value={reportPeriod}
                 onChange={(e) => setReportPeriod(e.target.value as ReportPeriod)}
-                className="bg-white border border-slate-200 text-cyan-100 rounded-lg px-3 py-2.5 text-sm focus:border-cyan-500/60 focus:outline-none transition"
+                className="bg-slate-800/50 border border-cyan-700/30 text-cyan-100 rounded-lg px-3 py-2.5 text-sm focus:border-cyan-500/60 focus:outline-none transition"
               >
-                <option value="CURRENT_MONTH">MÃªs atual</option>
-                <option value="LAST_3_MONTHS">3 Ãºltimos meses</option>
-                <option value="LAST_12_MONTHS">12 Ãºltimos meses</option>
+                <option value="CURRENT_MONTH">Mês atual</option>
+                <option value="LAST_3_MONTHS">3 últimos meses</option>
+                <option value="LAST_12_MONTHS">12 últimos meses</option>
               </select>
-            </div>
-
-            <div className="mt-5 rounded-2xl border border-slate-200 bg-white/85 p-4">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div>
-                  <p className="text-sm font-bold text-slate-900">Foto da Familia</p>
-                  <p className="text-xs text-slate-400">Deixe o app com a cara da sua casa.</p>
-                </div>
-                <div className="flex gap-2">
-                  <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/20 transition-colors">
-                    <Upload size={14} />
-                    Enviar foto
-                    <input type="file" accept="image/*" onChange={handleFamilyPhotoChange} className="hidden" />
-                  </label>
-                  {familyPhoto && (
-                    <button
-                      type="button"
-                      onClick={handleFamilyPhotoRemove}
-                      className="inline-flex items-center gap-1 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-100 transition-colors"
-                    >
-                      <X size={14} />
-                      Remover
-                    </button>
-                  )}
-                </div>
-              </div>
-              {familyPhoto ? (
-                <div className="mt-4 overflow-hidden rounded-xl border border-cyan-500/30">
-                  <img src={familyPhoto} alt="Foto da familia" className="h-56 w-full object-cover" />
-                </div>
-              ) : (
-                <div className="mt-4 rounded-xl border border-dashed border-cyan-500/30 bg-cyan-500/5 p-6 text-center text-sm text-slate-400">
-                  Nenhuma foto selecionada ainda.
-                </div>
-              )}
             </div>
             {reportMessage && <p className={`text-xs mt-3 ${reportMessage.includes('sucesso') ? 'text-emerald-400' : 'text-red-400'}`}>{reportMessage}</p>}
             {totalBalanceMessage && <p className={`text-xs mt-2 ${totalBalanceMessage.includes('sucesso') ? 'text-emerald-400' : 'text-red-400'}`}>{totalBalanceMessage}</p>}
-          </div>
-
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            <div className={`xl:col-span-1 p-5 ${panelClass}`}>
-              <h3 className="text-base font-bold text-slate-900 mb-4">Nova movimentacao</h3>
-              <div className="grid grid-cols-2 gap-3">
-                <Link href="/dashboard/transactions" className="rounded-xl border border-slate-200 bg-white p-4 hover:border-emerald-300 transition-colors">
-                  <p className="text-sm font-semibold text-slate-900">Despesa</p>
-                  <p className="text-xs text-slate-500 mt-1">Registrar um gasto</p>
-                </Link>
-                <Link href="/dashboard/transactions" className="rounded-xl border border-slate-200 bg-white p-4 hover:border-emerald-300 transition-colors">
-                  <p className="text-sm font-semibold text-slate-900">Receita</p>
-                  <p className="text-xs text-slate-500 mt-1">Registrar entrada</p>
-                </Link>
-                <Link href="/dashboard/scheduled" className="rounded-xl border border-slate-200 bg-white p-4 hover:border-emerald-300 transition-colors">
-                  <p className="text-sm font-semibold text-slate-900">Transferencia</p>
-                  <p className="text-xs text-slate-500 mt-1">Entre contas</p>
-                </Link>
-                <Link href="/dashboard/cashflow" className="rounded-xl border border-slate-200 bg-white p-4 hover:border-emerald-300 transition-colors">
-                  <p className="text-sm font-semibold text-slate-900">Escanear</p>
-                  <p className="text-xs text-slate-500 mt-1">Comprovante</p>
-                </Link>
-              </div>
-
-              <div className="mt-5">
-                <h4 className="text-sm font-semibold text-slate-700 mb-2">Recentes</h4>
-                <div className="space-y-2">
-                  {summary.family.dailyDigest.transactions.slice(0, 4).map((tx) => (
-                    <div key={tx.id} className="flex items-center justify-between rounded-lg bg-white border border-slate-200 px-3 py-2">
-                      <p className="text-sm text-slate-700 truncate">{tx.description}</p>
-                      <span className="text-xs font-semibold text-rose-500">{formatCurrency(tx.amount)}</span>
-                    </div>
-                  ))}
-                  {summary.family.dailyDigest.transactions.length === 0 && (
-                    <p className="text-xs text-slate-500">Sem lancamentos recentes.</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className={`xl:col-span-1 p-5 ${panelClass}`}>
-              <h3 className="text-base font-bold text-slate-900 mb-3">Assistente Financeiro</h3>
-              <p className="text-xs text-slate-500 mb-3">Pergunte se pode comprar algo e veja o impacto.</p>
-              <form onSubmit={handleSimulatePurchase} className="flex gap-2 mb-3">
-                <input
-                  type="number"
-                  min="1"
-                  value={simAmount}
-                  onChange={(e) => setSimAmount(e.target.value)}
-                  placeholder="Valor da compra"
-                  className="flex-1 bg-white border border-slate-200 text-slate-900 rounded-lg px-3 py-2 text-sm"
-                />
-                <button type="submit" className="rounded-lg bg-emerald-500 hover:bg-emerald-400 text-white px-3 py-2 text-sm font-semibold">
-                  Simular
-                </button>
-              </form>
-
-              <div className="rounded-xl border border-slate-200 bg-white p-3 min-h-[180px]">
-                {!simResult ? (
-                  <p className="text-sm text-slate-500">Digite um valor para receber analise do assistente.</p>
-                ) : (
-                  <div className="space-y-2 text-sm">
-                    <p className={`${simResult.canAfford ? 'text-emerald-600' : 'text-rose-600'} font-semibold`}>
-                      {simResult.canAfford ? 'Pode comprar com seguranca.' : 'Melhor adiar essa compra por enquanto.'}
-                    </p>
-                    <p className="text-slate-700">{simResult.message}</p>
-                    <p className="text-slate-600">Limite sem comprometer metas: <span className="font-semibold text-slate-900">{formatCurrency(Math.max(simResult.currentMonthlySavings, 0))}</span></p>
-                    {simResult.goalDelayMonths !== null && (
-                      <p className="text-slate-600">Atraso estimado na meta: <span className="font-semibold text-slate-900">{simResult.goalDelayMonths} mes(es)</span></p>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              <div className={`p-5 ${panelClass}`}>
-                <h3 className="text-base font-bold text-slate-900 mb-3">Calendario de contas</h3>
-                <div className="space-y-2">
-                  {summary.payable.items.slice(0, 5).map((item: any) => (
-                    <div key={item.id} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
-                      <div>
-                        <p className="text-sm font-medium text-slate-800">{item.description}</p>
-                        <p className="text-xs text-slate-500">{new Date(item.dueDate).toLocaleDateString('pt-BR')}</p>
-                      </div>
-                      <span className="text-sm font-semibold text-slate-900">{formatCurrency(item.amount)}</span>
-                    </div>
-                  ))}
-                  {summary.payable.items.length === 0 && <p className="text-sm text-slate-500">Nenhum compromisso pendente.</p>}
-                </div>
-              </div>
-
-              <div className={`p-5 ${panelClass}`}>
-                <h3 className="text-base font-bold text-slate-900 mb-3">Membros da familia</h3>
-                <div className="space-y-2">
-                  {(teamReport?.members || []).slice(0, 5).map((member: any) => (
-                    <div key={member.userId} className="flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-2">
-                      <p className="text-sm font-medium text-slate-800">{member.name}</p>
-                      <span className="text-xs text-slate-500">Acesso total</span>
-                    </div>
-                  ))}
-                  {(!teamReport || !teamReport.members || teamReport.members.length === 0) && (
-                    <p className="text-sm text-slate-500">Apenas voce no momento.</p>
-                  )}
-                </div>
-                <Link href="/dashboard/team" className="mt-3 inline-flex text-xs font-semibold text-emerald-600 hover:text-emerald-500">
-                  Gerenciar familia
-                </Link>
-              </div>
-            </div>
           </div>
 
           {/* Key Metrics - Premium Cards */}
@@ -950,19 +774,19 @@ export default function DashboardPage() {
               color="green"
             />
             <PremiumStatCard
-              label="Entradas do MÃªs"
+              label="Entradas do Mês"
               value={summary.cashFlow.income}
               icon={TrendingUp}
               color="blue"
             />
             <PremiumStatCard
-              label="SaÃ­das do MÃªs"
+              label="Saídas do Mês"
               value={summary.cashFlow.expenses}
               icon={TrendingDown}
               color="red"
             />
             <PremiumStatCard
-              label="Resultado do MÃªs"
+              label="Resultado do Mês"
               value={summary.cashFlow.profit}
               icon={summary.cashFlow.profit >= 0 ? TrendingUp : TrendingDown}
               color={summary.cashFlow.profit >= 0 ? 'green' : 'red'}
@@ -971,14 +795,14 @@ export default function DashboardPage() {
 
           {/* Health & Goal Section */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className={`lg:col-span-1 p-6 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-slate-100 backdrop-blur`}>
+            <div className={`lg:col-span-1 p-6 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-slate-900 backdrop-blur`}>
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 bg-emerald-500/20 rounded-lg">
                   <HeartPulse size={18} className="text-emerald-400" />
                 </div>
-                <h2 className="text-sm font-bold text-slate-900">Saude Financeira</h2>
+                <h2 className="text-sm font-bold text-white">Saúde Financeira</h2>
               </div>
-              <div className="space-y-2 text-xs text-slate-600">
+              <div className="space-y-2 text-xs text-slate-300">
                 <div className="flex items-center gap-2">
                   <div className={`w-2 h-2 rounded-full ${summary.family.health.allBillsUpToDate ? 'bg-emerald-400' : 'bg-red-400'}`} />
                   {summary.family.health.allBillsUpToDate ? 'Contas em dia' : `${summary.family.health.overdueCount} atrasadas`}
@@ -990,39 +814,39 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <div className={`lg:col-span-1 p-6 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-slate-100 backdrop-blur`}>
+            <div className={`lg:col-span-1 p-6 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-slate-900 backdrop-blur`}>
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 bg-blue-500/20 rounded-lg">
                   <Target size={18} className="text-blue-400" />
                 </div>
-                <h2 className="text-sm font-bold text-slate-900">Objetivo</h2>
+                <h2 className="text-sm font-bold text-white">Objetivo</h2>
               </div>
               {summary.family.goal ? (
                 <div className="space-y-2">
-                  <p className="text-slate-900 font-semibold text-sm">{summary.family.goal.name}</p>
-                  <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <p className="text-white font-semibold text-sm">{summary.family.goal.name}</p>
+                  <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
                     <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400" style={{ width: `${Math.min(summary.family.goal.progress, 100).toFixed(0)}%` }} />
                   </div>
-                  <p className="text-xs text-slate-400">{summary.family.goal.progress.toFixed(0)}% â€¢ Faltam {formatCurrency(summary.family.goal.remaining)}</p>
+                  <p className="text-xs text-slate-400">{summary.family.goal.progress.toFixed(0)}% • Faltam {formatCurrency(summary.family.goal.remaining)}</p>
                 </div>
               ) : (
                 <p className="text-xs text-slate-400">Crie uma meta para acompanhar</p>
               )}
             </div>
 
-            <div className={`lg:col-span-1 p-6 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-slate-100 backdrop-blur`}>
+            <div className={`lg:col-span-1 p-6 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-slate-900 backdrop-blur`}>
               <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 bg-emerald-500/20 rounded-lg">
                   <PiggyBank size={18} className="text-emerald-400" />
                 </div>
-                <h2 className="text-sm font-bold text-slate-900">Poupanca</h2>
+                <h2 className="text-sm font-bold text-white">Poupança</h2>
               </div>
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-xs text-slate-400">Economizado</span>
                   <span className="text-sm font-bold text-emerald-400">{formatCurrency(summary.family.savings.saved)}</span>
                 </div>
-                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400" style={{ width: `${Math.min(summary.family.savings.progress, 100).toFixed(0)}%` }} />
                 </div>
                 <p className="text-xs text-slate-400">Meta: {formatCurrency(summary.family.savings.target)}</p>
@@ -1031,10 +855,10 @@ export default function DashboardPage() {
           </div>
 
           {/* Charts Section */}
-          <div className={`p-6 rounded-2xl border border-slate-200 bg-white/80 backdrop-blur`}>
-            <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+          <div className={`p-6 rounded-2xl border border-cyan-500/20 bg-slate-900/50 backdrop-blur`}>
+            <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
               <div className="w-1 h-6 bg-gradient-to-b from-cyan-500 to-cyan-600 rounded-full" />
-              EvoluÃ§Ã£o Mensal
+              Evolução Mensal
             </h2>
             <ResponsiveContainer width="100%" height={320}>
               <AreaChart data={evolution}>
@@ -1057,21 +881,21 @@ export default function DashboardPage() {
                 />
                 <Legend wrapperStyle={{ color: '#cbd5e1' }} />
                 <Area type="monotone" dataKey="income" name="Entradas" stroke="#10b981" fill="url(#income)" strokeWidth={2} />
-                <Area type="monotone" dataKey="expenses" name="SaÃ­das" stroke="#f87171" fill="url(#expenses)" strokeWidth={2} />
+                <Area type="monotone" dataKey="expenses" name="Saídas" stroke="#f87171" fill="url(#expenses)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
 
           {/* Team Section */}
           {teamReport && teamReport.members.length > 1 && (
-            <div className={`p-6 rounded-2xl border border-slate-200 bg-white/80 backdrop-blur`}>
-              <h2 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
+            <div className={`p-6 rounded-2xl border border-cyan-500/20 bg-slate-900/50 backdrop-blur`}>
+              <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
                 <div className="w-1 h-6 bg-gradient-to-b from-cyan-500 to-cyan-600 rounded-full" />
-                LanÃ§amentos por Pessoa
+                Lançamentos por Pessoa
               </h2>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {teamReport.members.map((m: any) => (
-                  <div key={m.userId} className="bg-gradient-to-br from-white/50 to-slate-100 rounded-xl p-4 border border-cyan-500/10">
+                  <div key={m.userId} className="bg-gradient-to-br from-slate-800/50 to-slate-900 rounded-xl p-4 border border-cyan-500/10">
                     <div className="text-slate-400 text-xs font-semibold mb-2">{m.name}</div>
                     <div className="text-emerald-400 font-bold text-sm">{formatCurrency(m.totalIncome)}</div>
                     <div className="text-red-400 text-xs">{formatCurrency(m.totalExpense)}</div>
@@ -1086,7 +910,7 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className={`p-6 ${panelClass}`}>
-          <h2 className="text-lg font-semibold text-slate-900 mb-4">ðŸ¥§ Gastos do Mes</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">🥧 Gastos do Mes</h2>
           {categories.length > 0 ? (
             <ResponsiveContainer width="100%" height={260}>
               <PieChart>
@@ -1097,40 +921,40 @@ export default function DashboardPage() {
               </PieChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-slate-400 text-center py-16">Nenhuma despesa este mÃªs</p>
+            <p className="text-gray-500 text-center py-16">Nenhuma despesa este mês</p>
           )}
         </div>
 
         <div className="space-y-4">
           <div className={`p-6 ${panelClass}`}>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-slate-900">ðŸ”´ A Pagar</h2>
+              <h2 className="text-lg font-semibold text-white">🔴 A Pagar</h2>
               <AnimatedCurrency value={summary.payable.total} className="text-red-400 font-bold" />
             </div>
             {summary.payable.items.slice(0, 4).map((p: any) => (
-              <div key={p.id} className="flex justify-between text-sm py-2 border-b border-slate-200 last:border-0">
-                <span className="text-slate-600">{p.description}</span>
+              <div key={p.id} className="flex justify-between text-sm py-2 border-b border-gray-800 last:border-0">
+                <span className="text-gray-300">{p.description}</span>
                 <div className="text-right">
                   <div className="text-red-400">{formatCurrency(p.amount)}</div>
-                  <div className="text-slate-400 text-xs">{new Date(p.dueDate).toLocaleDateString('pt-BR')}</div>
+                  <div className="text-gray-500 text-xs">{new Date(p.dueDate).toLocaleDateString('pt-BR')}</div>
                 </div>
               </div>
             ))}
-            {summary.payable.items.length === 0 && <p className="text-slate-400 text-sm">Nenhuma conta pendente âœ…</p>}
+            {summary.payable.items.length === 0 && <p className="text-gray-500 text-sm">Nenhuma conta pendente ✅</p>}
           </div>
 
           <div className={`p-6 ${panelClass}`}>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-slate-900">ðŸŸ¢ A Receber</h2>
+              <h2 className="text-lg font-semibold text-white">🟢 A Receber</h2>
               <AnimatedCurrency value={summary.receivable.total} className="text-green-400 font-bold" />
             </div>
             {summary.receivable.items.slice(0, 4).map((p: any) => (
-              <div key={p.id} className="flex justify-between text-sm py-2 border-b border-slate-200 last:border-0">
-                <span className="text-slate-600">{p.description}</span>
+              <div key={p.id} className="flex justify-between text-sm py-2 border-b border-gray-800 last:border-0">
+                <span className="text-gray-300">{p.description}</span>
                 <span className="text-green-400">{formatCurrency(p.amount)}</span>
               </div>
             ))}
-            {summary.receivable.items.length === 0 && <p className="text-slate-400 text-sm">Nenhum valor a receber</p>}
+            {summary.receivable.items.length === 0 && <p className="text-gray-500 text-sm">Nenhum valor a receber</p>}
           </div>
         </div>
       </div>
@@ -1139,37 +963,37 @@ export default function DashboardPage() {
         <div className={`p-6 ${panelClass}`}>
           <div className="flex items-center gap-2 mb-4">
             <TrendingDown size={18} className="text-orange-400" />
-            <h2 className="text-lg font-semibold text-slate-900">Top Gastos Familiares</h2>
+            <h2 className="text-lg font-semibold text-white">Top Gastos Familiares</h2>
           </div>
           <div className="space-y-2">
             {summary.family.topSpending.length > 0 ? summary.family.topSpending.map((item) => (
-              <div key={item.name} className="flex items-center justify-between text-sm border-b border-slate-200 pb-2">
-                <span className="text-slate-600">{item.name}</span>
-                <span className="text-slate-900 font-medium">{formatCurrency(item.amount)}</span>
+              <div key={item.name} className="flex items-center justify-between text-sm border-b border-gray-800 pb-2">
+                <span className="text-gray-300">{item.name}</span>
+                <span className="text-white font-medium">{formatCurrency(item.amount)}</span>
               </div>
-            )) : <p className="text-sm text-slate-400">Sem gastos no periodo.</p>}
+            )) : <p className="text-sm text-gray-500">Sem gastos no periodo.</p>}
           </div>
         </div>
 
         <div className={`p-6 ${panelClass}`}>
           <div className="flex items-center gap-2 mb-4">
             <CalendarClock size={18} className="text-cyan-400" />
-            <h2 className="text-lg font-semibold text-slate-900">Resumo de Hoje</h2>
+            <h2 className="text-lg font-semibold text-white">Resumo de Hoje</h2>
           </div>
-          <p className="text-sm text-slate-600 mb-3">Total gasto hoje: <span className="text-slate-900 font-semibold">{formatCurrency(summary.family.dailyDigest.totalSpentToday)}</span></p>
+          <p className="text-sm text-gray-300 mb-3">Total gasto hoje: <span className="text-white font-semibold">{formatCurrency(summary.family.dailyDigest.totalSpentToday)}</span></p>
           <div className="space-y-2">
             {summary.family.dailyDigest.transactions.length > 0 ? summary.family.dailyDigest.transactions.map((tx) => (
-              <div key={tx.id} className="flex items-center justify-between text-sm border-b border-slate-200 pb-2">
+              <div key={tx.id} className="flex items-center justify-between text-sm border-b border-gray-800 pb-2">
                 <div>
-                  <p className="text-slate-700">{tx.description}</p>
+                  <p className="text-gray-200">{tx.description}</p>
                   <div className="flex flex-wrap items-center gap-2 mt-1">
-                    <p className="text-xs text-slate-400">{tx.category}</p>
+                    <p className="text-xs text-gray-500">{tx.category}</p>
                     <PaymentMethodChip method={tx.paymentMethod} />
                   </div>
                 </div>
                 <span className="text-red-400">{formatCurrency(tx.amount)}</span>
               </div>
-            )) : <p className="text-sm text-slate-400">Sem lancamentos hoje.</p>}
+            )) : <p className="text-sm text-gray-500">Sem lancamentos hoje.</p>}
           </div>
         </div>
       </div>
@@ -1187,12 +1011,12 @@ export default function DashboardPage() {
 
 
       <div className={`p-6 ${panelClass}`}>
-        <h2 className="text-lg font-semibold text-slate-900 mb-4">ðŸ¦ Contas</h2>
+        <h2 className="text-lg font-semibold text-white mb-4">🏦 Contas</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {summary.balance.accounts.map((acc: any) => (
-            <div key={acc.id} className="bg-white rounded-xl p-4">
-              <div className="text-slate-500 text-sm">{acc.type === 'CASH' ? 'ðŸ’µ' : 'ðŸ¦'} {acc.name}</div>
-              <div className={`text-lg font-bold mt-1 ${acc.balance >= 0 ? 'text-slate-900' : 'text-red-400'}`}>
+            <div key={acc.id} className="bg-gray-800 rounded-xl p-4">
+              <div className="text-gray-400 text-sm">{acc.type === 'CASH' ? '💵' : '🏦'} {acc.name}</div>
+              <div className={`text-lg font-bold mt-1 ${acc.balance >= 0 ? 'text-white' : 'text-red-400'}`}>
                 {formatCurrency(acc.balance)}
               </div>
             </div>
@@ -1201,35 +1025,35 @@ export default function DashboardPage() {
       </div>
 
       <div className={`p-6 ${panelClass}`}>
-        <h2 className="text-lg font-semibold text-slate-900 mb-4">Notificacoes da Familia</h2>
+        <h2 className="text-lg font-semibold text-white mb-4">Notificacoes da Familia</h2>
 
         {!settings ? (
-          <p className="text-sm text-slate-400">Carregando configuracoes...</p>
+          <p className="text-sm text-gray-500">Carregando configuracoes...</p>
         ) : (
           <form onSubmit={handleSaveSettings} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <label className="flex items-center justify-between bg-white rounded-lg p-3 text-sm">
-                <span className="text-slate-600">Lembretes de contas</span>
+              <label className="flex items-center justify-between bg-gray-800 rounded-lg p-3 text-sm">
+                <span className="text-gray-300">Lembretes de contas</span>
                 <input type="checkbox" checked={settings.remindersEnabled} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, remindersEnabled: e.target.checked }) : prev)} />
               </label>
-              <label className="flex items-center justify-between bg-white rounded-lg p-3 text-sm">
-                <span className="text-slate-600">Alerta de caixa negativo</span>
+              <label className="flex items-center justify-between bg-gray-800 rounded-lg p-3 text-sm">
+                <span className="text-gray-300">Alerta de caixa negativo</span>
                 <input type="checkbox" checked={settings.cashflowAlertEnabled} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, cashflowAlertEnabled: e.target.checked }) : prev)} />
               </label>
-              <label className="flex items-center justify-between bg-white rounded-lg p-3 text-sm">
-                <span className="text-slate-600">Resumo diario</span>
+              <label className="flex items-center justify-between bg-gray-800 rounded-lg p-3 text-sm">
+                <span className="text-gray-300">Resumo diario</span>
                 <input type="checkbox" checked={settings.dailyDigestEnabled} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, dailyDigestEnabled: e.target.checked }) : prev)} />
               </label>
-              <label className="flex items-center justify-between bg-white rounded-lg p-3 text-sm">
-                <span className="text-slate-600">Resumo semanal</span>
+              <label className="flex items-center justify-between bg-gray-800 rounded-lg p-3 text-sm">
+                <span className="text-gray-300">Resumo semanal</span>
                 <input type="checkbox" checked={settings.weeklyDigestEnabled} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, weeklyDigestEnabled: e.target.checked }) : prev)} />
               </label>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="bg-white rounded-lg p-3">
-                <p className="text-xs text-slate-500 mb-1">Fuso horario</p>
-                <select value={settings.timezone} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, timezone: e.target.value }) : prev)} className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded px-2 py-1 text-sm">
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-1">Fuso horario</p>
+                <select value={settings.timezone} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, timezone: e.target.value }) : prev)} className="w-full bg-gray-900 border border-gray-700 text-white rounded px-2 py-1 text-sm">
                   <option value="America/Sao_Paulo">America/Sao_Paulo</option>
                   <option value="America/Manaus">America/Manaus</option>
                   <option value="America/Belem">America/Belem</option>
@@ -1237,23 +1061,23 @@ export default function DashboardPage() {
                   <option value="America/Cuiaba">America/Cuiaba</option>
                 </select>
               </div>
-              <div className="bg-white rounded-lg p-3">
-                <p className="text-xs text-slate-500 mb-1">Hora lembretes (0-23)</p>
-                <input type="number" min="0" max="23" value={settings.remindersHour} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, remindersHour: Number(e.target.value) }) : prev)} className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded px-2 py-1 text-sm" />
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-1">Hora lembretes (0-23)</p>
+                <input type="number" min="0" max="23" value={settings.remindersHour} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, remindersHour: Number(e.target.value) }) : prev)} className="w-full bg-gray-900 border border-gray-700 text-white rounded px-2 py-1 text-sm" />
               </div>
-              <div className="bg-white rounded-lg p-3">
-                <p className="text-xs text-slate-500 mb-1">Hora resumo diario (0-23)</p>
-                <input type="number" min="0" max="23" value={settings.dailyDigestHour} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, dailyDigestHour: Number(e.target.value) }) : prev)} className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded px-2 py-1 text-sm" />
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-1">Hora resumo diario (0-23)</p>
+                <input type="number" min="0" max="23" value={settings.dailyDigestHour} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, dailyDigestHour: Number(e.target.value) }) : prev)} className="w-full bg-gray-900 border border-gray-700 text-white rounded px-2 py-1 text-sm" />
               </div>
-              <div className="bg-white rounded-lg p-3">
-                <p className="text-xs text-slate-500 mb-1">Hora resumo semanal (0-23)</p>
-                <input type="number" min="0" max="23" value={settings.weeklyDigestHour} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, weeklyDigestHour: Number(e.target.value) }) : prev)} className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded px-2 py-1 text-sm" />
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-xs text-gray-400 mb-1">Hora resumo semanal (0-23)</p>
+                <input type="number" min="0" max="23" value={settings.weeklyDigestHour} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, weeklyDigestHour: Number(e.target.value) }) : prev)} className="w-full bg-gray-900 border border-gray-700 text-white rounded px-2 py-1 text-sm" />
               </div>
             </div>
 
-            <div className="bg-white rounded-lg p-3 max-w-xs">
-              <p className="text-xs text-slate-500 mb-1">Dia resumo semanal</p>
-              <select value={settings.weeklyDigestWeekday} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, weeklyDigestWeekday: Number(e.target.value) }) : prev)} className="w-full bg-slate-50 border border-slate-200 text-slate-900 rounded px-2 py-1 text-sm">
+            <div className="bg-gray-800 rounded-lg p-3 max-w-xs">
+              <p className="text-xs text-gray-400 mb-1">Dia resumo semanal</p>
+              <select value={settings.weeklyDigestWeekday} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, weeklyDigestWeekday: Number(e.target.value) }) : prev)} className="w-full bg-gray-900 border border-gray-700 text-white rounded px-2 py-1 text-sm">
                 <option value={0}>Domingo</option>
                 <option value={1}>Segunda</option>
                 <option value={2}>Terca</option>
@@ -1264,9 +1088,9 @@ export default function DashboardPage() {
               </select>
             </div>
 
-            <div className="bg-white rounded-lg p-3">
-              <p className="text-xs text-slate-500 mb-1">Ultimos envios</p>
-              <div className="text-xs text-slate-600 space-y-1">
+            <div className="bg-gray-800 rounded-lg p-3">
+              <p className="text-xs text-gray-400 mb-1">Ultimos envios</p>
+              <div className="text-xs text-gray-300 space-y-1">
                 <p>Lembretes: {settings.lastRemindersSentAt ? new Date(settings.lastRemindersSentAt).toLocaleString('pt-BR') : 'nunca'}</p>
                 <p>Resumo diario: {settings.lastDailyDigestSentAt ? new Date(settings.lastDailyDigestSentAt).toLocaleString('pt-BR') : 'nunca'}</p>
                 <p>Resumo semanal: {settings.lastWeeklyDigestSentAt ? new Date(settings.lastWeeklyDigestSentAt).toLocaleString('pt-BR') : 'nunca'}</p>
@@ -1281,53 +1105,53 @@ export default function DashboardPage() {
       </div>
 
       <div className={`p-6 ${panelClass}`}>
-        <h2 className="text-lg font-semibold text-slate-900 mb-4">Minha Conta</h2>
+        <h2 className="text-lg font-semibold text-white mb-4">Minha Conta</h2>
 
         <form onSubmit={handleChangePassword} className="space-y-3 max-w-xl">
           <div>
-            <label className="text-xs text-slate-500">Senha atual</label>
+            <label className="text-xs text-gray-400">Senha atual</label>
             <div className="mt-1 flex gap-2">
               <input
                 type={showCurrentPassword ? 'text' : 'password'}
                 value={accountForm.currentPassword}
                 onChange={(e) => setAccountForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
-                className="w-full bg-white border border-slate-200 text-slate-900 rounded-lg px-3 py-2 text-sm"
+                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
                 required
               />
-              <button type="button" onClick={() => setShowCurrentPassword((v) => !v)} className="bg-white border border-slate-200 text-slate-700 rounded-lg px-3 py-2 text-xs">
+              <button type="button" onClick={() => setShowCurrentPassword((v) => !v)} className="bg-gray-800 border border-gray-700 text-gray-200 rounded-lg px-3 py-2 text-xs">
                 {showCurrentPassword ? 'Ocultar' : 'Mostrar'}
               </button>
             </div>
           </div>
 
           <div>
-            <label className="text-xs text-slate-500">Nova senha</label>
+            <label className="text-xs text-gray-400">Nova senha</label>
             <div className="mt-1 flex gap-2">
               <input
                 type={showNewPassword ? 'text' : 'password'}
                 value={accountForm.newPassword}
                 onChange={(e) => setAccountForm((prev) => ({ ...prev, newPassword: e.target.value }))}
-                className="w-full bg-white border border-slate-200 text-slate-900 rounded-lg px-3 py-2 text-sm"
+                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
                 required
               />
-              <button type="button" onClick={() => setShowNewPassword((v) => !v)} className="bg-white border border-slate-200 text-slate-700 rounded-lg px-3 py-2 text-xs">
+              <button type="button" onClick={() => setShowNewPassword((v) => !v)} className="bg-gray-800 border border-gray-700 text-gray-200 rounded-lg px-3 py-2 text-xs">
                 {showNewPassword ? 'Ocultar' : 'Mostrar'}
               </button>
             </div>
-            <p className="text-[11px] text-slate-400 mt-1">Requisitos: 8+ caracteres, maiuscula, minuscula, numero e simbolo.</p>
+            <p className="text-[11px] text-gray-500 mt-1">Requisitos: 8+ caracteres, maiuscula, minuscula, numero e simbolo.</p>
           </div>
 
           <div>
-            <label className="text-xs text-slate-500">Confirmar nova senha</label>
+            <label className="text-xs text-gray-400">Confirmar nova senha</label>
             <div className="mt-1 flex gap-2">
               <input
                 type={showConfirmPassword ? 'text' : 'password'}
                 value={accountForm.confirmNewPassword}
                 onChange={(e) => setAccountForm((prev) => ({ ...prev, confirmNewPassword: e.target.value }))}
-                className="w-full bg-white border border-slate-200 text-slate-900 rounded-lg px-3 py-2 text-sm"
+                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
                 required
               />
-              <button type="button" onClick={() => setShowConfirmPassword((v) => !v)} className="bg-white border border-slate-200 text-slate-700 rounded-lg px-3 py-2 text-xs">
+              <button type="button" onClick={() => setShowConfirmPassword((v) => !v)} className="bg-gray-800 border border-gray-700 text-gray-200 rounded-lg px-3 py-2 text-xs">
                 {showConfirmPassword ? 'Ocultar' : 'Mostrar'}
               </button>
             </div>
@@ -1351,11 +1175,11 @@ export default function DashboardPage() {
 
       <div className={`p-6 space-y-4 ${panelClass}`}>
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-slate-900">Diagnostico do Sistema</h2>
+          <h2 className="text-lg font-semibold text-white">Diagnostico do Sistema</h2>
           <button
             type="button"
             onClick={loadDiagnostics}
-            className="text-xs bg-white hover:bg-gray-700 text-slate-700 px-3 py-2 rounded-lg"
+            className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-lg"
           >
             Atualizar
           </button>
@@ -1366,51 +1190,51 @@ export default function DashboardPage() {
         )}
 
         {!systemHealth ? (
-          <p className="text-sm text-slate-400">Carregando diagnostico...</p>
+          <p className="text-sm text-gray-500">Carregando diagnostico...</p>
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-              <div className="bg-white rounded-lg p-3">
-                <p className="text-slate-500">Backend</p>
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-gray-400">Backend</p>
                 <p className={`${systemHealth.status === 'ok' ? 'text-emerald-400' : 'text-amber-400'} font-semibold`}>
                   {systemHealth.status === 'ok' ? 'Saudavel' : 'Degradado'}
                 </p>
-                <p className="text-slate-400 text-xs mt-1">Uptime: {Math.floor(systemHealth.server.uptimeSec / 60)} min</p>
+                <p className="text-gray-500 text-xs mt-1">Uptime: {Math.floor(systemHealth.server.uptimeSec / 60)} min</p>
               </div>
 
-              <div className="bg-white rounded-lg p-3">
-                <p className="text-slate-500">Banco</p>
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-gray-400">Banco</p>
                 <p className={`${systemHealth.database.status === 'ok' ? 'text-emerald-400' : 'text-rose-400'} font-semibold`}>
                   {systemHealth.database.status === 'ok' ? 'Conectado' : 'Erro'}
                 </p>
                 {systemHealth.database.error && <p className="text-rose-400 text-xs mt-1">{systemHealth.database.error}</p>}
               </div>
 
-              <div className="bg-white rounded-lg p-3">
-                <p className="text-slate-500">IA</p>
-                <p className="text-slate-900 font-semibold">{systemHealth.openai.mode}</p>
-                <p className="text-slate-400 text-xs mt-1">OpenAI {systemHealth.openai.configured ? 'configurada' : 'nao configurada'}</p>
+              <div className="bg-gray-800 rounded-lg p-3">
+                <p className="text-gray-400">IA</p>
+                <p className="text-white font-semibold">{systemHealth.openai.mode}</p>
+                <p className="text-gray-500 text-xs mt-1">OpenAI {systemHealth.openai.configured ? 'configurada' : 'nao configurada'}</p>
               </div>
             </div>
 
             {!systemHealth.whatsapp.enabled ? (
-              <div className="bg-white rounded-lg p-3 text-sm">
-                <p className="text-slate-600 mb-1">Canal de Automacao</p>
+              <div className="bg-gray-800 rounded-lg p-3 text-sm">
+                <p className="text-gray-300 mb-1">Canal de Automacao</p>
                 <p className="text-emerald-400 font-semibold">Modo app-only ativo</p>
-                <p className="text-slate-400 text-xs mt-1">WhatsApp desativado. Use lancamentos manuais em "Lancamentos".</p>
+                <p className="text-gray-500 text-xs mt-1">WhatsApp desativado. Use lancamentos manuais em "Lancamentos".</p>
               </div>
             ) : (
               <>
-                <div className="bg-white rounded-lg p-3 text-sm">
-                  <p className="text-slate-600 mb-2">WhatsApp Runtime</p>
+                <div className="bg-gray-800 rounded-lg p-3 text-sm">
+                  <p className="text-gray-300 mb-2">WhatsApp Runtime</p>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
-                    <p className="text-slate-500">Ativas: <span className="text-slate-900">{systemHealth.whatsapp.runtime.activeCount}</span></p>
-                    <p className="text-slate-500">Conectadas: <span className="text-emerald-400">{systemHealth.whatsapp.runtime.connectedCount}</span></p>
-                    <p className="text-slate-500">Aguardando QR: <span className="text-amber-400">{systemHealth.whatsapp.runtime.qrPendingCount}</span></p>
+                    <p className="text-gray-400">Ativas: <span className="text-white">{systemHealth.whatsapp.runtime.activeCount}</span></p>
+                    <p className="text-gray-400">Conectadas: <span className="text-emerald-400">{systemHealth.whatsapp.runtime.connectedCount}</span></p>
+                    <p className="text-gray-400">Aguardando QR: <span className="text-amber-400">{systemHealth.whatsapp.runtime.qrPendingCount}</span></p>
                   </div>
-                  <div className="mt-2 text-xs text-slate-500">
+                  <div className="mt-2 text-xs text-gray-400">
                     <p>
-                      Reparo diario: <span className="text-slate-900">{systemHealth.whatsapp.repairLimit.used}/{systemHealth.whatsapp.repairLimit.limit}</span>
+                      Reparo diario: <span className="text-white">{systemHealth.whatsapp.repairLimit.used}/{systemHealth.whatsapp.repairLimit.limit}</span>
                       {' '}({systemHealth.whatsapp.repairLimit.remaining} restante{systemHealth.whatsapp.repairLimit.remaining === 1 ? '' : 's'})
                     </p>
                     <p>Janela iniciada em {new Date(systemHealth.whatsapp.repairLimit.periodStart).toLocaleString('pt-BR')}</p>
@@ -1418,16 +1242,16 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <p className="text-sm text-slate-600">Sessoes do Tenant</p>
+                  <p className="text-sm text-gray-300">Sessoes do Tenant</p>
                   {systemHealth.whatsapp.tenantSessions.length === 0 ? (
-                    <p className="text-sm text-slate-400">Nenhuma sessao cadastrada.</p>
+                    <p className="text-sm text-gray-500">Nenhuma sessao cadastrada.</p>
                   ) : systemHealth.whatsapp.tenantSessions.map((session) => (
-                    <div key={session.id} className="bg-white rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                    <div key={session.id} className="bg-gray-800 rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
                       <div>
-                        <p className="text-sm text-slate-900">{session.phoneNumber}</p>
-                        <p className="text-xs text-slate-500">
+                        <p className="text-sm text-white">{session.phoneNumber}</p>
+                        <p className="text-xs text-gray-400">
                           {session.isActive ? 'Ativa' : 'Inativa'}
-                          {session.connectedAt ? ` â€¢ conectada em ${new Date(session.connectedAt).toLocaleString('pt-BR')}` : ''}
+                          {session.connectedAt ? ` • conectada em ${new Date(session.connectedAt).toLocaleString('pt-BR')}` : ''}
                         </p>
                       </div>
                       <button
@@ -1442,21 +1266,21 @@ export default function DashboardPage() {
                   ))}
                 </div>
 
-                <div className="bg-white rounded-lg p-3">
-                  <p className="text-sm text-slate-600 mb-2">Auditoria de Reparo (ultimos eventos)</p>
+                <div className="bg-gray-800 rounded-lg p-3">
+                  <p className="text-sm text-gray-300 mb-2">Auditoria de Reparo (ultimos eventos)</p>
                   {systemHealth.whatsapp.repairAudit.length === 0 ? (
-                    <p className="text-xs text-slate-400">Nenhum reparo registrado nesta execucao.</p>
+                    <p className="text-xs text-gray-500">Nenhum reparo registrado nesta execucao.</p>
                   ) : (
                     <div className="space-y-2">
                       {systemHealth.whatsapp.repairAudit.slice(0, 8).map((item, idx) => (
-                        <div key={`${item.at}-${item.sessionId}-${idx}`} className="text-xs text-slate-600 border-b border-slate-200 pb-2 last:border-0">
+                        <div key={`${item.at}-${item.sessionId}-${idx}`} className="text-xs text-gray-300 border-b border-gray-700 pb-2 last:border-0">
                           <p>
                             <span className={`${item.outcome === 'SUCCESS' ? 'text-emerald-400' : item.outcome === 'FAILED' ? 'text-rose-400' : 'text-amber-400'} font-semibold`}>
                               {item.outcome}
                             </span>
-                            {' '}â€¢ {item.phoneNumber} â€¢ {new Date(item.at).toLocaleString('pt-BR')}
+                            {' '}• {item.phoneNumber} • {new Date(item.at).toLocaleString('pt-BR')}
                           </p>
-                          {item.actor?.email && <p className="text-slate-400">por {item.actor.email}</p>}
+                          {item.actor?.email && <p className="text-gray-500">por {item.actor.email}</p>}
                           {item.error && <p className="text-rose-400">erro: {item.error}</p>}
                         </div>
                       ))}
@@ -1465,8 +1289,8 @@ export default function DashboardPage() {
                 </div>
 
                 {repairQr && (
-                  <div className="bg-white rounded-lg p-3">
-                    <p className="text-sm text-slate-600 mb-2">Novo QR de reparo</p>
+                  <div className="bg-gray-800 rounded-lg p-3">
+                    <p className="text-sm text-gray-300 mb-2">Novo QR de reparo</p>
                     <img src={repairQr} alt="QR Code de reparo" className="w-64 h-64 bg-white p-2 rounded" />
                   </div>
                 )}
@@ -1501,12 +1325,11 @@ function StatCard({ label, numericValue, icon, color }: { label: string; numeric
   const animatedValue = useAnimatedNumber(numericValue)
 
   return (
-    <div className="dashboard-panel rounded-2xl p-6 border border-slate-200 bg-white/85 backdrop-blur-xl shadow-[0_10px_30px_rgba(2,8,23,0.4)]">
+    <div className="dashboard-panel rounded-2xl p-6 border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_10px_30px_rgba(2,8,23,0.4)]">
       <div className={`inline-flex p-2 rounded-lg mb-3 border ${colors[color]}`}>{icon}</div>
       <div className="text-slate-400 text-xs uppercase tracking-wider">{label}</div>
-      <div className={`text-2xl font-black mt-1 ${color === 'red' ? 'text-rose-300' : 'text-slate-900'}`}>{formatCurrency(animatedValue)}</div>
+      <div className={`text-2xl font-black mt-1 ${color === 'red' ? 'text-rose-300' : 'text-white'}`}>{formatCurrency(animatedValue)}</div>
     </div>
   )
 }
-
 
