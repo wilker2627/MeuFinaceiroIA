@@ -12,6 +12,15 @@ function getFinancialMood(profit, previousProfit) {
   return 'CAREFUL'
 }
 
+function expensePeriodFilter(startDate, endDate) {
+  return {
+    OR: [
+      { isPaid: true, date: { gte: startDate, lte: endDate } },
+      { isPaid: false, dueDate: { gte: startDate, lte: endDate } }
+    ]
+  }
+}
+
 /**
  * Resumo geral: saldo, contas a pagar/receber, totais do mês
  */
@@ -34,7 +43,9 @@ export async function getFinancialSummary(tenantId) {
     scheduledReceivable,
     goals,
     monthlyExpensesByCategory,
-    todayExpenses
+    todayExpenses,
+    recentIncomes,
+    recentExpenses
   ] = await Promise.all([
     prisma.account.findMany({ where: { tenantId } }),
     prisma.transaction.aggregate({
@@ -42,7 +53,7 @@ export async function getFinancialSummary(tenantId) {
       _sum: { amount: true }
     }),
     prisma.transaction.aggregate({
-      where: { tenantId, type: 'EXPENSE', date: { gte: monthStart, lte: monthEnd } },
+      where: { tenantId, type: 'EXPENSE', ...expensePeriodFilter(monthStart, monthEnd) },
       _sum: { amount: true }
     }),
     prisma.transaction.aggregate({
@@ -50,7 +61,7 @@ export async function getFinancialSummary(tenantId) {
       _sum: { amount: true }
     }),
     prisma.transaction.aggregate({
-      where: { tenantId, type: 'EXPENSE', date: { gte: previousMonthStart, lte: previousMonthEnd } },
+      where: { tenantId, type: 'EXPENSE', ...expensePeriodFilter(previousMonthStart, previousMonthEnd) },
       _sum: { amount: true }
     }),
     prisma.scheduledPayment.findMany({
@@ -68,13 +79,25 @@ export async function getFinancialSummary(tenantId) {
       orderBy: { createdAt: 'asc' }
     }),
     prisma.transaction.findMany({
-      where: { tenantId, type: 'EXPENSE', date: { gte: monthStart, lte: monthEnd } },
+      where: { tenantId, type: 'EXPENSE', ...expensePeriodFilter(monthStart, monthEnd) },
       include: { category: true }
     }),
     prisma.transaction.findMany({
-      where: { tenantId, type: 'EXPENSE', date: { gte: todayStart, lte: todayEnd } },
+      where: { tenantId, type: 'EXPENSE', isPaid: true, date: { gte: todayStart, lte: todayEnd } },
       include: { category: true },
       orderBy: { date: 'desc' }
+    }),
+    prisma.transaction.findMany({
+      where: { tenantId, type: 'INCOME' },
+      include: { category: true, account: true },
+      orderBy: { date: 'desc' },
+      take: 5
+    }),
+    prisma.transaction.findMany({
+      where: { tenantId, type: 'EXPENSE' },
+      include: { category: true, account: true },
+      orderBy: { date: 'desc' },
+      take: 5
     })
   ])
 
@@ -170,7 +193,23 @@ export async function getFinancialSummary(tenantId) {
           category: tx.category?.name || 'Outros',
           paymentMethod: tx.paymentMethod || 'CASH'
         }))
-      }
+      },
+      recentEntries: recentIncomes.map((tx) => ({
+        id: tx.id,
+        description: tx.description,
+        amount: tx.amount,
+        date: tx.date,
+        paymentMethod: tx.paymentMethod || 'CASH',
+        category: tx.category?.name || 'Outros'
+      })),
+      recentExpenses: recentExpenses.map((tx) => ({
+        id: tx.id,
+        description: tx.description,
+        amount: tx.amount,
+        date: tx.type === 'EXPENSE' && tx.isPaid === false && tx.dueDate ? tx.dueDate : tx.date,
+        paymentMethod: tx.paymentMethod || 'CASH',
+        category: tx.category?.name || 'Outros'
+      }))
     }
   }
 }
@@ -181,7 +220,13 @@ export async function getFinancialSummary(tenantId) {
 export async function getCashFlow(tenantId, startDate, endDate) {
   const [transactions] = await Promise.all([
     prisma.transaction.findMany({
-      where: { tenantId, date: { gte: startDate, lte: endDate } },
+      where: {
+        tenantId,
+        OR: [
+          { type: 'INCOME', date: { gte: startDate, lte: endDate } },
+          { type: 'EXPENSE', ...expensePeriodFilter(startDate, endDate) }
+        ]
+      },
       orderBy: { date: 'asc' }
     })
   ])
@@ -202,7 +247,7 @@ export async function getCashFlow(tenantId, startDate, endDate) {
  */
 export async function getExpensesByCategory(tenantId, startDate, endDate) {
   const expenses = await prisma.transaction.findMany({
-    where: { tenantId, type: 'EXPENSE', date: { gte: startDate, lte: endDate } },
+    where: { tenantId, type: 'EXPENSE', ...expensePeriodFilter(startDate, endDate) },
     include: { category: true }
   })
 
@@ -234,7 +279,7 @@ export async function getMonthlyEvolution(tenantId, months = 6) {
         _sum: { amount: true }
       }),
       prisma.transaction.aggregate({
-        where: { tenantId, type: 'EXPENSE', date: { gte: start, lte: end } },
+        where: { tenantId, type: 'EXPENSE', ...expensePeriodFilter(start, end) },
         _sum: { amount: true }
       })
     ])
@@ -322,7 +367,14 @@ export async function getUserReport(tenantId, userId) {
   const monthEnd = endOfMonth(now)
 
   const transactions = await prisma.transaction.findMany({
-    where: { tenantId, userId, date: { gte: monthStart, lte: monthEnd } },
+    where: {
+      tenantId,
+      userId,
+      OR: [
+        { type: 'INCOME', date: { gte: monthStart, lte: monthEnd } },
+        { type: 'EXPENSE', ...expensePeriodFilter(monthStart, monthEnd) }
+      ]
+    },
     include: { category: true }
   })
 
@@ -367,7 +419,7 @@ export async function getTeamReport(tenantId) {
         _sum: { amount: true }
       }),
       prisma.transaction.aggregate({
-        where: { tenantId, userId: tu.userId, type: 'EXPENSE', date: { gte: monthStart, lte: monthEnd } },
+        where: { tenantId, userId: tu.userId, type: 'EXPENSE', ...expensePeriodFilter(monthStart, monthEnd) },
         _sum: { amount: true }
       })
     ])

@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import api from '@/lib/api'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Eye, EyeOff, Mail, Lock, Loader } from 'lucide-react'
 
 const LOGIN_DRAFT_KEY = 'login_draft_v1'
@@ -48,6 +49,7 @@ export default function LoginPage() {
       addToast('Bem-vindo! Entrando em seu dashboard...', 'success', 2000)
     } catch (err: any) {
       if (err.response?.status === 401) {
+        const tenantErrorMessage = err.response?.data?.error
         try {
           const { data } = await api.post('/admin/login', {
             email: String(email || '').trim().toLowerCase(),
@@ -61,7 +63,7 @@ export default function LoginPage() {
           window.location.href = '/admin/dashboard'
           return
         } catch {
-          addToast('E-mail ou senha inválidos. Verifique seus dados.', 'error')
+          addToast(tenantErrorMessage || 'E-mail ou senha invalidos. Verifique seus dados.', 'error')
         }
       } else {
         addToast(err.response?.data?.error || 'Erro ao fazer login.', 'error')
@@ -77,11 +79,11 @@ export default function LoginPage() {
       return
     }
     if (newPassword.length < 8) {
-      addToast('A nova senha deve ter no mínimo 8 caracteres.', 'warning')
+      addToast('A nova senha deve ter no minimo 8 caracteres.', 'warning')
       return
     }
     if (newPassword !== confirmNewPassword) {
-      addToast('As senhas não conferem.', 'error')
+      addToast('As senhas nao conferem.', 'error')
       return
     }
 
@@ -113,11 +115,19 @@ export default function LoginPage() {
       <div className="w-full max-w-md relative z-10">
         {/* Logo & Title */}
         <div className="text-center mb-8">
-          <div className="inline-block p-4 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 rounded-2xl mb-4">
-            <span className="text-4xl font-black text-cyan-400">MF</span>
+          <div className="inline-flex items-center justify-center p-2.5 bg-gradient-to-br from-cyan-500/16 to-emerald-500/14 border border-cyan-500/30 rounded-3xl mb-4 shadow-[0_16px_38px_rgba(34,211,238,0.22)]">
+            <Image
+                  src="/financeiroai-logo.svg?v=20260708r3"
+              alt="FinanceiroAI"
+              width={84}
+              height={84}
+              priority
+              className="rounded-2xl"
+            />
           </div>
-          <h1 className="text-4xl font-black text-white">MeuFinanceiro</h1>
-          <p className="text-slate-400 mt-2 text-sm">Gerencie suas finanças com IA</p>
+          <h1 className="text-4xl font-black text-white tracking-tight">FinanceiroAI</h1>
+          <p className="text-slate-400 mt-2 text-sm">Gerencie suas financas com IA</p>
+          <p className="text-[11px] mt-1 uppercase tracking-[0.28em] text-cyan-300/70">Smart Money OS</p>
         </div>
 
         {/* Main Form */}
@@ -151,7 +161,7 @@ export default function LoginPage() {
                 onChange={e => setPassword(e.target.value)}
                 required
                 className="w-full bg-slate-800/50 border border-cyan-700/30 text-white rounded-lg px-10 py-3 placeholder-slate-500 focus:border-cyan-500/60 focus:outline-none transition"
-                placeholder="••••••••"
+                placeholder="********"
               />
               <button
                 type="button"
@@ -226,7 +236,7 @@ export default function LoginPage() {
         {/* Footer Links */}
         <div className="mt-6 text-center space-y-3">
           <p className="text-slate-400 text-sm">
-            Não tem conta?{' '}
+            Nao tem conta?{' '}
             <Link href="/register" className="text-cyan-400 hover:text-cyan-300 font-semibold transition">
               Criar conta
             </Link>
@@ -241,3 +251,4 @@ export default function LoginPage() {
     </div>
   )
 }
+

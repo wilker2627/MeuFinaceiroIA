@@ -77,6 +77,10 @@ authRouter.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Credenciais inválidas.' })
     }
 
+    if (!tenant.passwordHash || typeof tenant.passwordHash !== 'string') {
+      return res.status(401).json({ error: 'Conta sem senha configurada. Use redefinicao de senha.' })
+    }
+
     const valid = await bcrypt.compare(password, tenant.passwordHash)
     if (!valid) {
       return res.status(401).json({ error: 'Credenciais inválidas.' })

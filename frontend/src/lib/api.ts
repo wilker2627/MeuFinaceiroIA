@@ -22,7 +22,10 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response?.status === 401 && typeof window !== 'undefined') {
+    const status = Number(err?.response?.status || 0)
+    const shouldResetSession = status === 401 || status === 403
+
+    if (shouldResetSession && typeof window !== 'undefined') {
       localStorage.removeItem('token')
       localStorage.removeItem('tenant')
 

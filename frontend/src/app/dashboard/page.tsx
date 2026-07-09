@@ -11,6 +11,7 @@ import AIInsights from '@/components/AIInsights'
 import GoalsWidget from '@/components/GoalsWidget'
 import RecurringTransactions from '@/components/RecurringTransactions'
 import { useAuth } from '@/contexts/AuthContext'
+import { subscribeDashboardRefresh } from '@/lib/dashboardRefresh'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
@@ -131,10 +132,25 @@ interface Summary {
       totalSpentToday: number
       transactions: Array<{ id: string; description: string; amount: number; category: string; paymentMethod?: 'PIX' | 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD' }>
     }
+    recentEntries?: Array<{ id: string; description: string; amount: number; date: string; paymentMethod: string; category: string }>
+    recentExpenses?: Array<{ id: string; description: string; amount: number; date: string; paymentMethod: string; category: string }>
   }
 }
 
 type ReportPeriod = 'CURRENT_MONTH' | 'LAST_3_MONTHS' | 'LAST_12_MONTHS'
+
+type DisplayMood = 'EXCELLENT' | 'ATTENTION' | 'CAREFUL'
+
+const PERSON_TAG_REGEX = /\|\s*Pessoa:\s*(.+)$/i
+
+function extractPersonFromDescription(description?: string) {
+  const match = String(description || '').match(PERSON_TAG_REGEX)
+  return match?.[1]?.trim() || ''
+}
+
+function cleanDescription(description?: string) {
+  return String(description || '').replace(PERSON_TAG_REGEX, '').trim()
+}
 
 const PAYMENT_METHOD_META: Record<string, { label: string; icon: any; className: string }> = {
   PIX: { label: 'PIX', icon: QrCode, className: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
@@ -146,6 +162,31 @@ const PAYMENT_METHOD_META: Record<string, { label: string; icon: any; className:
 const getPaymentMethodMeta = (method?: string) => PAYMENT_METHOD_META[method || 'CASH'] || PAYMENT_METHOD_META.CASH
 
 const COLORS = ['#22c55e','#3b82f6','#f97316','#a855f7','#ec4899','#eab308','#14b8a6','#ef4444']
+
+function deriveDisplayMood(summary: Summary): DisplayMood {
+  const balance = Number(summary.balance?.total || 0)
+  const profit = Number(summary.cashFlow?.profit || 0)
+  const income = Number(summary.cashFlow?.income || 0)
+  const payable = Number(summary.payable?.total || 0)
+  const overdueCount = Number(summary.family?.health?.overdueCount || 0)
+  const dueTodayCount = Number(summary.family?.health?.dueTodayCount || 0)
+
+  if (balance < 0 || overdueCount > 0 || (income > 0 && profit < -(income * 0.2))) {
+    return 'CAREFUL'
+  }
+
+  if (dueTodayCount > 0 || profit < 0 || (payable > 0 && balance < payable * 0.5)) {
+    return 'ATTENTION'
+  }
+
+  return 'EXCELLENT'
+}
+
+function getMoodLabel(mood: DisplayMood) {
+  if (mood === 'EXCELLENT') return 'Excelente'
+  if (mood === 'ATTENTION') return 'Em observação'
+  return 'Cuidado'
+}
 
 export default function DashboardPage() {
   const { logout } = useAuth()
@@ -169,13 +210,23 @@ export default function DashboardPage() {
   const [totalBalanceInput, setTotalBalanceInput] = useState('')
   const [savingTotalBalance, setSavingTotalBalance] = useState(false)
   const [totalBalanceMessage, setTotalBalanceMessage] = useState('')
+  const [savingsInput, setSavingsInput] = useState('')
+  const [savingsTargetInput, setSavingsTargetInput] = useState('')
+  const [surplusTransferInput, setSurplusTransferInput] = useState('')
+  const [withdrawSavingsInput, setWithdrawSavingsInput] = useState('')
+  const [savingSavings, setSavingSavings] = useState(false)
+  const [savingsMessage, setSavingsMessage] = useState('')
   const [reportMessage, setReportMessage] = useState('')
   const [exportingReport, setExportingReport] = useState(false)
   const [reportPeriod, setReportPeriod] = useState<ReportPeriod>('CURRENT_MONTH')
+  const [recentEntries, setRecentEntries] = useState<Array<{ id: string; description: string; amount: number; category: string; paymentMethod?: string }>>([])
+  const [recentExpenses, setRecentExpenses] = useState<Array<{ id: string; description: string; amount: number; category: string; paymentMethod?: string }>>([])
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [nextMonthCardBill, setNextMonthCardBill] = useState<{ month: string; total: number; items: any[] }>({ month: '', total: 0, items: [] })
 
   function parseCurrencyInput(value: string) {
     const cleaned = String(value || '').replace(/\s/g, '').replace(/R\$/gi, '')
@@ -190,30 +241,120 @@ export default function DashboardPage() {
     return Number(cleaned)
   }
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const [s, e, c, t, g, ns] = await Promise.all([
-          api.get('/dashboard/summary'),
-          api.get('/dashboard/evolution?months=6'),
-          api.get('/dashboard/categories'),
-          api.get('/users/team-report'),
-          api.get('/dashboard/goals'),
-          api.get('/dashboard/notification-settings'),
-        ])
-        setSummary(s.data)
-        setTotalBalanceInput(String(Number(s.data?.balance?.total || 0).toFixed(2)).replace('.', ','))
-        setEvolution(e.data)
-        setCategories(c.data)
-        setTeamReport(t.data)
-        setGoals(g.data)
-        setSettings(ns.data)
-        await loadDiagnostics()
-      } catch {}
+  async function loadDashboardData() {
+    setLoading(true)
+    setLoadError('')
+
+    try {
+      const { data } = await api.get('/dashboard/summary')
+      setSummary(data)
+      setTotalBalanceInput(String(Number(data?.balance?.total || 0).toFixed(2)).replace('.', ','))
+    } catch (error: any) {
+      setSummary(null)
+      setLoadError(error?.response?.data?.error || 'Nao foi possivel carregar os dados principais do dashboard.')
       setLoading(false)
+      return
     }
-    load()
+
+    const now = new Date()
+    const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+    const nextMonthKey = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`
+
+    const [evolutionRes, categoriesRes, teamRes, goalsRes, settingsRes, nextMonthCardBillRes] = await Promise.allSettled([
+      api.get('/dashboard/evolution?months=6'),
+      api.get('/dashboard/categories'),
+      api.get('/users/team-report'),
+      api.get('/dashboard/goals'),
+      api.get('/dashboard/notification-settings'),
+      api.get(`/dashboard/transactions?month=${nextMonthKey}&type=EXPENSE&paymentMethod=CREDIT_CARD&limit=300&page=1`),
+    ])
+
+    const [recentEntriesRes, recentExpensesRes] = await Promise.allSettled([
+      api.get('/dashboard/transactions?type=INCOME&limit=5&page=1'),
+      api.get('/dashboard/transactions?type=EXPENSE&limit=5&page=1'),
+    ])
+
+    if (evolutionRes.status === 'fulfilled') setEvolution(evolutionRes.value.data)
+    else setEvolution([])
+
+    if (categoriesRes.status === 'fulfilled') setCategories(categoriesRes.value.data)
+    else setCategories([])
+
+    if (teamRes.status === 'fulfilled') setTeamReport(teamRes.value.data)
+    else setTeamReport(null)
+
+    if (goalsRes.status === 'fulfilled') setGoals(goalsRes.value.data)
+    else setGoals([])
+
+    if (settingsRes.status === 'fulfilled') setSettings(settingsRes.value.data)
+    else setSettings(null)
+
+    if (nextMonthCardBillRes.status === 'fulfilled') {
+      const txs = (nextMonthCardBillRes.value.data?.transactions || [])
+        .filter((tx: any) => tx?.type === 'EXPENSE' && tx?.paymentMethod === 'CREDIT_CARD')
+        .sort((a: any, b: any) => {
+          const aTime = new Date(a?.dueDate || a?.date || 0).getTime()
+          const bTime = new Date(b?.dueDate || b?.date || 0).getTime()
+          return aTime - bTime
+        })
+      const total = txs.reduce((sum: number, tx: any) => sum + Number(tx?.amount || 0), 0)
+      setNextMonthCardBill({
+        month: formatMonthKeyToPtBr(nextMonthKey),
+        total,
+        items: txs.slice(0, 6),
+      })
+    } else {
+      setNextMonthCardBill({ month: formatMonthKeyToPtBr(nextMonthKey), total: 0, items: [] })
+    }
+
+    if (recentEntriesRes.status === 'fulfilled') {
+      setRecentEntries((recentEntriesRes.value.data?.transactions || []).map((tx: any) => ({
+        id: tx.id,
+        description: cleanDescription(tx.description),
+        amount: Number(tx.amount || 0),
+        category: tx.category?.name || 'Outros',
+        paymentMethod: tx.paymentMethod || 'CASH',
+      })))
+    } else {
+      setRecentEntries([])
+    }
+
+    if (recentExpensesRes.status === 'fulfilled') {
+      setRecentExpenses((recentExpensesRes.value.data?.transactions || []).map((tx: any) => ({
+        id: tx.id,
+        description: cleanDescription(tx.description),
+        amount: Number(tx.amount || 0),
+        category: tx.category?.name || 'Outros',
+        paymentMethod: tx.paymentMethod || 'CASH',
+      })))
+    } else {
+      setRecentExpenses([])
+    }
+
+    await loadDiagnostics()
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    loadDashboardData()
   }, [])
+
+  useEffect(() => {
+    return subscribeDashboardRefresh(() => {
+      loadDashboardData()
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!summary) return
+
+    const goal = goals.find((item) => /poupanc?a/i.test(String(item.name || '')))
+    const saved = Number(goal?.currentAmount ?? summary.family.savings.saved ?? 0)
+    const target = Math.max(Number(goal?.targetAmount ?? summary.family.savings.target ?? 0), 1)
+
+    setSavingsInput(String(Number(saved).toFixed(2)).replace('.', ','))
+    setSavingsTargetInput(String(Number(target).toFixed(2)).replace('.', ','))
+  }, [summary, goals])
 
   async function reloadSummary() {
     const { data } = await api.get('/dashboard/summary')
@@ -234,6 +375,152 @@ export default function DashboardPage() {
   async function reloadGoals() {
     const { data } = await api.get('/dashboard/goals')
     setGoals(data)
+  }
+
+  function getSavingsGoal() {
+    return goals.find((goal) => /poupanc?a/i.test(String(goal.name || '')))
+  }
+
+  async function ensureSavingsGoal() {
+    const existing = getSavingsGoal()
+    if (existing) return existing
+
+    const suggestedTarget = Math.max(Number(summary?.family?.savings?.target || 0), 5000)
+    const { data } = await api.post('/dashboard/goals', {
+      name: 'Poupanca Familiar',
+      targetAmount: suggestedTarget,
+      currentAmount: 0,
+    })
+
+    setGoals((prev) => [...prev, data])
+    return data
+  }
+
+  async function handleSetSavingsBalance(e: React.FormEvent) {
+    e.preventDefault()
+    setSavingsMessage('')
+
+    const parsedCurrent = parseCurrencyInput(savingsInput)
+    if (!Number.isFinite(parsedCurrent) || parsedCurrent < 0) {
+      setSavingsMessage('Informe um saldo valido para a poupanca. Exemplo: 3500,00')
+      return
+    }
+
+    const parsedTarget = parseCurrencyInput(savingsTargetInput)
+    if (!Number.isFinite(parsedTarget) || parsedTarget <= 0) {
+      setSavingsMessage('Informe uma meta valida para a poupanca. Exemplo: 10000,00')
+      return
+    }
+
+    setSavingSavings(true)
+    try {
+      const savingsGoal = await ensureSavingsGoal()
+      await api.patch(`/dashboard/goals/${savingsGoal.id}`, {
+        currentAmount: parsedCurrent,
+        targetAmount: parsedTarget,
+      })
+      await reloadGoals()
+      setSavingsMessage('Poupanca editada com sucesso.')
+    } catch (error: any) {
+      setSavingsMessage(error?.response?.data?.error || 'Nao foi possivel editar a poupanca.')
+    } finally {
+      setSavingSavings(false)
+    }
+  }
+
+  async function handleSaveSurplusToSavings() {
+    setSavingsMessage('')
+
+    if (!summary) {
+      setSavingsMessage('Resumo ainda nao carregado.')
+      return
+    }
+
+    const profit = Number(summary.cashFlow?.profit || 0)
+    if (profit <= 0) {
+      setSavingsMessage('Nao ha sobra neste mes para guardar na poupanca.')
+      return
+    }
+
+    const parsed = parseCurrencyInput(surplusTransferInput)
+    const amountToSave = Number.isFinite(parsed) ? parsed : profit
+
+    if (amountToSave <= 0) {
+      setSavingsMessage('Informe um valor maior que zero para guardar.')
+      return
+    }
+
+    if (amountToSave > profit) {
+      setSavingsMessage(`A sobra disponivel neste mes e ${formatCurrency(profit)}.`)
+      return
+    }
+
+    setSavingSavings(true)
+    try {
+      const savingsGoal = await ensureSavingsGoal()
+      const updatedAmount = Number(savingsGoal.currentAmount || 0) + amountToSave
+      await api.patch(`/dashboard/goals/${savingsGoal.id}`, { currentAmount: updatedAmount })
+      await reloadGoals()
+      setSurplusTransferInput('')
+      setSavingsMessage(`Guardado ${formatCurrency(amountToSave)} na poupanca.`)
+    } catch (error: any) {
+      setSavingsMessage(error?.response?.data?.error || 'Nao foi possivel guardar a sobra na poupanca.')
+    } finally {
+      setSavingSavings(false)
+    }
+  }
+
+  async function handleWithdrawFromSavings() {
+    setSavingsMessage('')
+
+    if (!summary) {
+      setSavingsMessage('Resumo ainda nao carregado.')
+      return
+    }
+
+    const savingsGoal = getSavingsGoal()
+    if (!savingsGoal) {
+      setSavingsMessage('Ainda nao existe poupanca cadastrada para retirada.')
+      return
+    }
+
+    const available = Number(savingsGoal.currentAmount || 0)
+    if (available <= 0) {
+      setSavingsMessage('Nao ha saldo na poupanca para retirar.')
+      return
+    }
+
+    const negativeBalance = Math.max(-Number(summary.balance?.total || 0), 0)
+    const parsed = parseCurrencyInput(withdrawSavingsInput)
+    const defaultAmount = negativeBalance > 0 ? negativeBalance : available
+    const amountToWithdraw = Number.isFinite(parsed) ? parsed : defaultAmount
+
+    if (amountToWithdraw <= 0) {
+      setSavingsMessage('Informe um valor maior que zero para retirar.')
+      return
+    }
+
+    if (amountToWithdraw > available) {
+      setSavingsMessage(`Voce tem ${formatCurrency(available)} disponivel na poupanca.`)
+      return
+    }
+
+    setSavingSavings(true)
+    try {
+      const updatedSavings = available - amountToWithdraw
+      await api.patch(`/dashboard/goals/${savingsGoal.id}`, { currentAmount: updatedSavings })
+
+      const newTotalBalance = Number(summary.balance?.total || 0) + amountToWithdraw
+      await api.patch('/dashboard/accounts/total-balance', { totalBalance: newTotalBalance })
+
+      await Promise.all([reloadGoals(), reloadSummary()])
+      setWithdrawSavingsInput('')
+      setSavingsMessage(`Retirado ${formatCurrency(amountToWithdraw)} da poupanca para cobrir saldo.`)
+    } catch (error: any) {
+      setSavingsMessage(error?.response?.data?.error || 'Nao foi possivel retirar da poupanca.')
+    } finally {
+      setSavingSavings(false)
+    }
   }
 
   async function handleAddGoal(e: React.FormEvent) {
@@ -377,19 +664,46 @@ export default function DashboardPage() {
       let reportTopSpending: Array<{ name: string; amount: number }> = currentSummary.family.topSpending
       let reportCategories: Array<{ name: string; total: number }> = categories
       let reportEvolution: Array<{ month: string; income: number; expenses: number }> = evolution
-      let moodLabel = currentSummary.family.mood === 'EXCELLENT'
-        ? 'Excelente'
-        : currentSummary.family.mood === 'ATTENTION'
-          ? 'Atencao'
-          : 'Cuidado'
+      let reportIncomeDetails: Array<{ date: string; description: string; amount: number; category: string; paymentMethod: string; person: string }> = []
+      let reportExpenseDetails: Array<{ date: string; description: string; amount: number; category: string; paymentMethod: string; person: string }> = []
+      let moodLabel = getMoodLabel(deriveDisplayMood(currentSummary))
+      const nowRef = new Date()
+      const currentMonthKey = `${nowRef.getFullYear()}-${String(nowRef.getMonth() + 1).padStart(2, '0')}`
+
+      const normalizeTxDetails = (transactions: any[]) => {
+        return (transactions || [])
+          .map((tx: any) => ({
+            date: (tx?.type === 'EXPENSE' && tx?.isPaid === false && tx?.dueDate)
+              ? new Date(tx.dueDate).toLocaleDateString('pt-BR')
+              : (tx?.date ? new Date(tx.date).toLocaleDateString('pt-BR') : '-'),
+            description: cleanDescription(tx?.description) || 'Sem descricao',
+            amount: Number(tx?.amount || 0),
+            category: String(tx?.category?.name || 'Sem categoria'),
+            paymentMethod: String(tx?.paymentMethod || 'CASH'),
+            person: String(tx?.user?.name || tx?.from?.name || tx?.to?.name || extractPersonFromDescription(tx?.description) || 'Nao informado'),
+            rawDate: (tx?.type === 'EXPENSE' && tx?.isPaid === false && tx?.dueDate)
+              ? new Date(tx.dueDate).getTime()
+              : (tx?.date ? new Date(tx.date).getTime() : 0),
+          }))
+          .sort((a: any, b: any) => b.rawDate - a.rawDate)
+      }
+
+      const currentMonthDetails = await Promise.all([
+        api.get(`/dashboard/transactions?month=${currentMonthKey}&type=INCOME&limit=300&page=1`).then((r) => r.data?.transactions || []).catch(() => []),
+        api.get(`/dashboard/transactions?month=${currentMonthKey}&type=EXPENSE&limit=300&page=1`).then((r) => r.data?.transactions || []).catch(() => []),
+      ])
+
+      reportIncomeDetails = normalizeTxDetails(currentMonthDetails[0])
+      reportExpenseDetails = normalizeTxDetails(currentMonthDetails[1])
 
       if (reportPeriod !== 'CURRENT_MONTH') {
         const monthsCount = reportPeriod === 'LAST_3_MONTHS' ? 3 : 12
         const monthKeys = getRecentMonthKeys(monthsCount)
 
-        const [cashflows, categoriesByMonth, expensesByMonth, evolutionData] = await Promise.all([
+        const [cashflows, categoriesByMonth, incomesByMonth, expensesByMonth, evolutionData] = await Promise.all([
           Promise.all(monthKeys.map((month) => api.get(`/dashboard/cashflow?month=${month}`).then((r) => r.data))),
           Promise.all(monthKeys.map((month) => api.get(`/dashboard/categories?month=${month}`).then((r) => r.data))),
+          Promise.all(monthKeys.map((month) => api.get(`/dashboard/transactions?month=${month}&type=INCOME&limit=300&page=1`).then((r) => r.data?.transactions || []))),
           Promise.all(monthKeys.map((month) => api.get(`/dashboard/transactions?month=${month}&type=EXPENSE&limit=500&page=1`).then((r) => r.data?.transactions || []))),
           api.get(`/dashboard/evolution?months=${monthsCount}`).then((r) => r.data),
         ])
@@ -419,12 +733,15 @@ export default function DashboardPage() {
           .sort((a, b) => b.amount - a.amount)
           .slice(0, 8)
 
+        reportIncomeDetails = normalizeTxDetails(incomesByMonth.flat())
+        reportExpenseDetails = normalizeTxDetails(expensesByMonth.flat())
+
         reportEvolution = evolutionData
 
         const oldest = monthKeys[monthKeys.length - 1]
         const newest = monthKeys[0]
         reportPeriodLabel = `${formatMonthKeyToPtBr(oldest)} a ${formatMonthKeyToPtBr(newest)}`
-        moodLabel = reportProfit >= 0 ? 'Excelente' : reportProfit > -(reportIncome * 0.15) ? 'Atencao' : 'Cuidado'
+        moodLabel = reportProfit >= 0 ? 'Excelente' : reportProfit > -(reportIncome * 0.15) ? 'Em observacao' : 'Cuidado'
       }
 
       const doc = new jsPDF({ unit: 'pt', format: 'a4' })
@@ -529,6 +846,58 @@ export default function DashboardPage() {
           y += 18
         })
       }
+
+      const writeTransactionDetails = (
+        title: string,
+        items: Array<{ date: string; description: string; amount: number; category: string; paymentMethod: string; person: string }>,
+        emptyText: string,
+      ) => {
+        ensureRoom(48)
+        doc.setFontSize(13)
+        doc.setFont('helvetica', 'bold')
+        doc.text(title, marginX, y)
+        y += 20
+        doc.setFontSize(11)
+        doc.setFont('helvetica', 'normal')
+
+        if (items.length === 0) {
+          doc.text(emptyText, marginX, y)
+          y += 18
+          return
+        }
+
+        const maxRows = 40
+        const shownItems = items.slice(0, maxRows)
+        shownItems.forEach((item, index) => {
+          ensureRoom(44)
+          const titleText = `${index + 1}. ${item.date} - ${item.description}`
+          const wrapped = doc.splitTextToSize(titleText, contentWidth - 120)
+          doc.text(wrapped, marginX, y)
+          doc.text(formatCurrency(item.amount), pageWidth - marginX, y, { align: 'right' })
+          y += wrapped.length * 13
+
+          ensureRoom(22)
+          doc.setFontSize(9)
+          doc.setTextColor(71, 85, 105)
+          doc.text(`Categoria: ${item.category} | Pagamento: ${item.paymentMethod} | Pessoa: ${item.person}`, marginX + 14, y)
+          doc.setTextColor(22, 28, 36)
+          doc.setFontSize(11)
+          y += 14
+        })
+
+        if (items.length > maxRows) {
+          ensureRoom(22)
+          doc.setFontSize(10)
+          doc.setTextColor(71, 85, 105)
+          doc.text(`Mostrando ${maxRows} de ${items.length} registros.`, marginX, y)
+          doc.setTextColor(22, 28, 36)
+          doc.setFontSize(11)
+          y += 16
+        }
+      }
+
+      writeTransactionDetails('Detalhamento de entradas', reportIncomeDetails, 'Sem entradas no periodo.')
+      writeTransactionDetails('Detalhamento de saidas', reportExpenseDetails, 'Sem saidas no periodo.')
 
       ensureRoom(48)
       doc.setFontSize(13)
@@ -642,24 +1011,64 @@ export default function DashboardPage() {
     </div>
   )
 
-  if (!summary) return null
+  if (!summary) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center px-4">
+        <div className="rounded-2xl border border-rose-500/30 bg-slate-900/80 p-6 text-center max-w-md">
+          <p className="text-rose-300 font-semibold">Nao foi possivel carregar o dashboard.</p>
+          <p className="text-slate-400 text-sm mt-2">{loadError || 'Tente novamente em alguns instantes.'}</p>
+          <button
+            type="button"
+            onClick={loadDashboardData}
+            className="mt-4 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-semibold px-4 py-2"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   const now = new Date()
   const weekday = now.toLocaleDateString('pt-BR', { weekday: 'long' })
   const moodMap = {
     EXCELLENT: { label: 'Excelente', Icon: Smile, color: 'text-emerald-400', detail: 'Vocês estão no caminho certo.' },
-    ATTENTION: { label: 'Atenção', Icon: Meh, color: 'text-amber-400', detail: 'Vale atenção em alguns gastos.' },
+    ATTENTION: { label: 'Em observação', Icon: Meh, color: 'text-amber-400', detail: 'Alguns gastos pedem ajuste.' },
     CAREFUL: { label: 'Cuidado', Icon: Frown, color: 'text-rose-400', detail: 'Despesas acima do ideal.' }
   }
-  const mood = moodMap[summary.family.mood]
+  const displayMood = deriveDisplayMood(summary)
+  const mood = moodMap[displayMood]
   const panelClass = 'dashboard-panel rounded-2xl border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.45)]'
+  const savingsGoal = getSavingsGoal()
+  const savingsSaved = Number(savingsGoal?.currentAmount ?? summary.family.savings.saved ?? 0)
+  const savingsTarget = Math.max(Number(savingsGoal?.targetAmount ?? summary.family.savings.target ?? 0), 1)
+  const savingsProgress = Math.min((savingsSaved / savingsTarget) * 100, 100)
+
+  const savingsStatus = (() => {
+    const msg = String(savingsMessage || '').toLowerCase()
+    if (msg.includes('retirado')) return { tone: 'red', note: 'Retirada recente' }
+    if (msg.includes('guardado') || msg.includes('atualizado')) return { tone: 'green', note: 'Aporte recente' }
+
+    const profit = Number(summary.cashFlow?.profit || 0)
+    if (profit > 0) return { tone: 'green', note: 'Mes com sobra' }
+    if (profit < 0) return { tone: 'red', note: 'Mes pressionado' }
+    return { tone: 'amber', note: 'Sem movimento recente' }
+  })()
+
+  const savingsHighlightClass =
+    savingsStatus.tone === 'green'
+      ? 'border-emerald-400/35 bg-emerald-400/10 text-emerald-300'
+      : savingsStatus.tone === 'red'
+        ? 'border-rose-400/35 bg-rose-400/10 text-rose-300'
+        : 'border-amber-400/35 bg-amber-400/10 text-amber-300'
 
   // Componente de Card de Estatística Premium
-  const PremiumStatCard = ({ label, value, icon: Icon, color, trend }: any) => {
+  const PremiumStatCard = ({ label, value, icon: Icon, color, trend, note }: any) => {
     const colorClasses = {
       green: 'from-emerald-500/20 to-emerald-400/5 border-emerald-500/30 text-emerald-400',
       blue: 'from-blue-500/20 to-blue-400/5 border-blue-500/30 text-blue-400',
       red: 'from-red-500/20 to-red-400/5 border-red-500/30 text-red-400',
+      amber: 'from-amber-500/20 to-amber-400/5 border-amber-500/30 text-amber-300',
       cyan: 'from-cyan-500/20 to-cyan-400/5 border-cyan-500/30 text-cyan-400'
     }
     const classes = colorClasses[color as keyof typeof colorClasses] || colorClasses.cyan
@@ -676,628 +1085,395 @@ export default function DashboardPage() {
         <p className="text-2xl md:text-3xl font-black text-white">
           <AnimatedCurrency value={value} />
         </p>
+        {note && <p className="mt-1 text-[11px] text-white/60">{note}</p>}
       </div>
     )
   }
 
   return (
-    <div className="relative min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
+    <div className="relative min-h-screen bg-[#050816] text-slate-100">
       <OnboardingGuide />
-      {/* Animated Background */}
+
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-40 -left-28 h-96 w-96 rounded-full bg-cyan-500/8 blur-3xl animate-pulse" style={{ animationDuration: '8s' }} />
-        <div className="absolute top-1/3 -right-32 h-[28rem] w-[28rem] rounded-full bg-emerald-500/6 blur-3xl animate-pulse" style={{ animationDuration: '10s', animationDelay: '2s' }} />
-        <div className="absolute bottom-0 left-1/2 h-80 w-80 rounded-full bg-blue-500/5 blur-3xl animate-pulse" style={{ animationDuration: '12s', animationDelay: '4s' }} />
+        <div className="absolute -top-44 left-[-8rem] h-[30rem] w-[30rem] rounded-full bg-cyan-500/12 blur-3xl" />
+        <div className="absolute top-1/3 -right-32 h-[28rem] w-[28rem] rounded-full bg-emerald-500/10 blur-3xl" />
+        <div className="absolute bottom-[-7rem] left-1/3 h-[20rem] w-[20rem] rounded-full bg-sky-500/10 blur-3xl" />
       </div>
 
-      <div className="relative p-4 md:p-8">
-        <div className="max-w-[1400px] mx-auto space-y-6">
-          
-          {/* Hero Section - Redesigned */}
-          <div className="rounded-3xl p-6 md:p-8 border border-cyan-500/20 bg-gradient-to-br from-slate-900/80 via-cyan-950/30 to-slate-900/80 backdrop-blur-xl shadow-[0_20px_60px_rgba(6,182,212,0.1)]">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-              <div className="flex-1">
-                <div className="inline-block mb-3 px-3 py-1 bg-cyan-500/15 border border-cyan-500/30 rounded-full">
-                  <p className="text-cyan-300 text-xs font-semibold tracking-wider uppercase">{weekday} • {summary.currentMonth}</p>
+      <div className="relative p-4 md:p-6 lg:p-8">
+        <div className="mx-auto grid max-w-[1500px] gap-5 xl:grid-cols-[290px_minmax(0,1fr)_330px]">
+          <aside className="space-y-5">
+            <div className="rounded-3xl border border-cyan-400/25 bg-slate-900/75 p-5 shadow-[0_18px_48px_rgba(2,8,23,0.55)] backdrop-blur-xl">
+              <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/80">Assistente Financeiro</p>
+              <h1 className="mt-3 text-2xl font-black leading-tight text-white">Resumo do seu dia</h1>
+              <p className="mt-2 text-sm text-slate-300">{weekday} • {summary.currentMonth}</p>
+
+              <div className="mt-5 rounded-2xl border border-slate-700/80 bg-slate-950/80 p-4">
+                <div className="flex items-center gap-3">
+                  <div className={`rounded-xl border border-slate-700/80 bg-slate-900/80 p-2 ${mood.color}`}>
+                    <mood.Icon size={20} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-white">Status: {mood.label}</p>
+                    <p className="text-xs text-slate-400">{mood.detail}</p>
+                    <p className="mt-1 text-[11px] text-slate-500">
+                      {summary.family.health.overdueCount} em atraso • {summary.family.health.dueTodayCount} vencem hoje
+                    </p>
+                  </div>
                 </div>
-                <h1 className="text-4xl md:text-5xl font-black text-white mt-3 leading-tight">
-                  Bem-vindo ao seu Financeiro
-                </h1>
-                <p className="text-slate-300 mt-4 text-base">Seu saldo disponível agora é de <span className="text-emerald-300 font-bold text-lg">{formatCurrency(summary.balance.total)}</span></p>
-              </div>
-              <div className={`flex items-center justify-center w-32 h-32 rounded-2xl ${mood.color} bg-gradient-to-br from-slate-800 to-slate-900 border border-white/10`}>
-                <div className="text-center">
-                  <mood.Icon size={48} className="mx-auto mb-2" />
-                  <p className="text-sm font-bold">{mood.label}</p>
+                <p className="mt-4 text-xs text-slate-400">Saldo disponível</p>
+                <p className="text-2xl font-black text-emerald-300">{formatCurrency(summary.balance.total)}</p>
+                <div className={`mt-3 rounded-xl border px-3 py-2 ${savingsHighlightClass}`}>
+                  <p className="text-[11px] uppercase tracking-[0.18em]">Saldo da poupanca</p>
+                  <p className="mt-1 text-xl font-black">{formatCurrency(savingsSaved)}</p>
                 </div>
               </div>
-            </div>
-            
-            {/* Action Bar */}
-            <div className="mt-6 flex flex-col sm:flex-row gap-3">
-              <Link
-                href="/dashboard/transactions"
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-emerald-400/40 bg-gradient-to-r from-emerald-500/20 to-emerald-400/10 hover:border-emerald-400/60 hover:from-emerald-500/30 transition text-emerald-200 px-4 py-3 text-sm font-semibold"
-              >
-                <Plus size={18} />
-                Novo Lançamento
-              </Link>
-              <button
-                type="button"
-                onClick={handleExportPdfReport}
-                disabled={exportingReport}
-                className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/40 bg-gradient-to-r from-cyan-500/20 to-cyan-400/10 hover:border-cyan-400/60 hover:from-cyan-500/30 transition disabled:opacity-50 text-cyan-100 px-4 py-3 text-sm font-semibold"
-              >
-                <FileText size={18} />
-                {exportingReport ? 'Gerando...' : 'Relatório PDF'}
-              </button>
+
+              <div className="mt-4 space-y-3">
+                <select
+                  value={reportPeriod}
+                  onChange={(e) => setReportPeriod(e.target.value as ReportPeriod)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900/80 px-3 py-2.5 text-sm text-slate-200 focus:border-cyan-500 focus:outline-none"
+                >
+                  <option value="CURRENT_MONTH">Mes atual</option>
+                  <option value="LAST_3_MONTHS">Ultimos 3 meses</option>
+                  <option value="LAST_12_MONTHS">Ultimos 12 meses</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={handleExportPdfReport}
+                  disabled={exportingReport}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-cyan-400/40 bg-cyan-400/15 px-4 py-2.5 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/25 disabled:opacity-60"
+                >
+                  <FileText size={16} />
+                  {exportingReport ? 'Gerando PDF...' : 'Exportar relatorio PDF'}
+                </button>
+              </div>
+
+              {reportMessage && (
+                <p className={`mt-3 text-xs ${reportMessage.toLowerCase().includes('sucesso') ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {reportMessage}
+                </p>
+              )}
             </div>
 
-            {/* Secondary Actions */}
-            <div className="mt-4 flex flex-col sm:flex-row gap-3 sm:items-end">
-              <form onSubmit={handleUpdateTotalBalance} className="flex-1 flex gap-2">
+            <div className="rounded-3xl border border-slate-700/70 bg-slate-900/70 p-5 shadow-[0_16px_40px_rgba(2,8,23,0.45)] backdrop-blur-xl">
+              <p className="text-sm font-semibold text-white">Ajustar saldo total</p>
+              <form onSubmit={handleUpdateTotalBalance} className="mt-3 flex gap-2">
                 <input
                   type="text"
                   value={totalBalanceInput}
                   onChange={(e) => setTotalBalanceInput(e.target.value)}
-                  placeholder="Ajustar saldo (ex: 1250,50)"
-                  className="flex-1 bg-slate-800/50 border border-cyan-700/30 text-white rounded-lg px-4 py-2.5 text-sm placeholder-slate-400 focus:border-cyan-500/60 focus:outline-none transition"
+                  placeholder="1250,50"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none"
                 />
                 <button
                   type="submit"
                   disabled={savingTotalBalance}
-                  className="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 disabled:opacity-60 text-slate-900 font-semibold rounded-lg px-4 py-2.5 text-sm transition"
+                  className="rounded-xl bg-cyan-400 px-3 py-2 text-sm font-semibold text-slate-900 transition hover:bg-cyan-300 disabled:opacity-60"
                 >
-                  {savingTotalBalance ? '...' : 'Ajustar'}
+                  OK
                 </button>
               </form>
-              <select
-                value={reportPeriod}
-                onChange={(e) => setReportPeriod(e.target.value as ReportPeriod)}
-                className="bg-slate-800/50 border border-cyan-700/30 text-cyan-100 rounded-lg px-3 py-2.5 text-sm focus:border-cyan-500/60 focus:outline-none transition"
-              >
-                <option value="CURRENT_MONTH">Mês atual</option>
-                <option value="LAST_3_MONTHS">3 últimos meses</option>
-                <option value="LAST_12_MONTHS">12 últimos meses</option>
-              </select>
+              {totalBalanceMessage && (
+                <p className={`mt-2 text-xs ${totalBalanceMessage.toLowerCase().includes('sucesso') ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  {totalBalanceMessage}
+                </p>
+              )}
+
+              <form onSubmit={handleSimulatePurchase} className="mt-4 space-y-2 border-t border-slate-800 pt-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Simulador</p>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={simAmount}
+                    onChange={(e) => setSimAmount(e.target.value)}
+                    placeholder="Valor da compra"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:border-cyan-500 focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-xl border border-sky-400/40 bg-sky-400/15 px-3 py-2 text-xs font-semibold text-sky-200 transition hover:bg-sky-400/25"
+                  >
+                    Simular
+                  </button>
+                </div>
+                {simResult && (
+                  <p className={`text-xs ${simResult.canAfford ? 'text-emerald-400' : 'text-amber-400'}`}>
+                    {simResult.message}
+                  </p>
+                )}
+              </form>
             </div>
-            {reportMessage && <p className={`text-xs mt-3 ${reportMessage.includes('sucesso') ? 'text-emerald-400' : 'text-red-400'}`}>{reportMessage}</p>}
-            {totalBalanceMessage && <p className={`text-xs mt-2 ${totalBalanceMessage.includes('sucesso') ? 'text-emerald-400' : 'text-red-400'}`}>{totalBalanceMessage}</p>}
-          </div>
+          </aside>
 
-          {/* Key Metrics - Premium Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <PremiumStatCard
-              label="Saldo Total"
-              value={summary.balance.total}
-              icon={DollarSign}
-              color="green"
-            />
-            <PremiumStatCard
-              label="Entradas do Mês"
-              value={summary.cashFlow.income}
-              icon={TrendingUp}
-              color="blue"
-            />
-            <PremiumStatCard
-              label="Saídas do Mês"
-              value={summary.cashFlow.expenses}
-              icon={TrendingDown}
-              color="red"
-            />
-            <PremiumStatCard
-              label="Resultado do Mês"
-              value={summary.cashFlow.profit}
-              icon={summary.cashFlow.profit >= 0 ? TrendingUp : TrendingDown}
-              color={summary.cashFlow.profit >= 0 ? 'green' : 'red'}
-            />
-          </div>
+          <section>
+            <div className="mx-auto w-full max-w-[780px] rounded-[2.2rem] border border-cyan-400/25 bg-gradient-to-b from-slate-900/95 via-slate-900/85 to-slate-950/95 p-4 md:p-6 shadow-[0_26px_80px_rgba(5,10,30,0.68)]">
+              <div className="mx-auto mb-5 h-1.5 w-24 rounded-full bg-slate-700/70" />
 
-          {/* Health & Goal Section */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className={`lg:col-span-1 p-6 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-slate-900 backdrop-blur`}>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-emerald-500/20 rounded-lg">
-                  <HeartPulse size={18} className="text-emerald-400" />
-                </div>
-                <h2 className="text-sm font-bold text-white">Saúde Financeira</h2>
-              </div>
-              <div className="space-y-2 text-xs text-slate-300">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${summary.family.health.allBillsUpToDate ? 'bg-emerald-400' : 'bg-red-400'}`} />
-                  {summary.family.health.allBillsUpToDate ? 'Contas em dia' : `${summary.family.health.overdueCount} atrasadas`}
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${summary.family.health.dueTodayCount === 0 ? 'bg-emerald-400' : 'bg-yellow-400'}`} />
-                  {summary.family.health.dueTodayCount > 0 ? `${summary.family.health.dueTodayCount} vencem hoje` : 'Nada vence hoje'}
-                </div>
-              </div>
-            </div>
-
-            <div className={`lg:col-span-1 p-6 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-500/10 to-slate-900 backdrop-blur`}>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-blue-500/20 rounded-lg">
-                  <Target size={18} className="text-blue-400" />
-                </div>
-                <h2 className="text-sm font-bold text-white">Objetivo</h2>
-              </div>
-              {summary.family.goal ? (
-                <div className="space-y-2">
-                  <p className="text-white font-semibold text-sm">{summary.family.goal.name}</p>
-                  <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-gradient-to-r from-blue-500 to-blue-400" style={{ width: `${Math.min(summary.family.goal.progress, 100).toFixed(0)}%` }} />
+              <div className="mb-5 rounded-2xl border border-cyan-500/25 bg-cyan-500/10 p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.2em] text-cyan-200/75">Visao Geral</p>
+                    <p className="mt-1 text-2xl font-black text-white">Painel Principal</p>
+                    <p className="text-sm text-slate-300">Seu fluxo financeiro em tempo real.</p>
                   </div>
-                  <p className="text-xs text-slate-400">{summary.family.goal.progress.toFixed(0)}% • Faltam {formatCurrency(summary.family.goal.remaining)}</p>
+                  <div className="rounded-xl border border-cyan-400/30 bg-cyan-500/15 p-2 text-cyan-200">
+                    <Rocket size={20} />
+                  </div>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <PremiumStatCard label="Poupanca" value={savingsSaved} icon={PiggyBank} color={savingsStatus.tone} note={savingsStatus.note} />
+                <PremiumStatCard label="Saldo" value={summary.balance.total} icon={DollarSign} color="green" />
+                <PremiumStatCard label="Entradas" value={summary.cashFlow.income} icon={TrendingUp} color="blue" />
+                <PremiumStatCard label="Saidas" value={summary.cashFlow.expenses} icon={TrendingDown} color="red" />
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm font-semibold text-white">Entradas recentes</p>
+                    <div className="text-right">
+                      <p className="text-xs text-emerald-200/80">Total</p>
+                      <p className="text-sm font-semibold text-emerald-200">{formatCurrency(recentEntries.reduce((sum, item) => sum + Number(item.amount || 0), 0))}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-xs text-slate-300">
+                    {recentEntries.slice(0, 5).map((item) => (
+                      <div key={item.id} className="flex items-center justify-between gap-2 rounded-xl border border-emerald-500/20 bg-slate-950/40 px-2 py-1.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-slate-100">{cleanDescription(item.description)}</p>
+                          <p className="text-[11px] text-slate-500">{item.category}</p>
+                        </div>
+                        <span className="text-emerald-300">{formatCurrency(Number(item.amount || 0))}</span>
+                      </div>
+                    ))}
+                    {recentEntries.length === 0 && <p className="text-slate-500">Sem entradas recentes.</p>}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-sm font-semibold text-white">Saidas recentes</p>
+                    <div className="text-right">
+                      <p className="text-xs text-rose-200/80">Total</p>
+                      <p className="text-sm font-semibold text-rose-200">{formatCurrency(recentExpenses.reduce((sum, item) => sum + Number(item.amount || 0), 0))}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-xs text-slate-300">
+                    {recentExpenses.slice(0, 5).map((item) => (
+                      <div key={item.id} className="flex items-center justify-between gap-2 rounded-xl border border-rose-500/20 bg-slate-950/40 px-2 py-1.5">
+                        <div className="min-w-0">
+                          <p className="truncate text-slate-100">{cleanDescription(item.description)}</p>
+                          <p className="text-[11px] text-slate-500">{item.category}</p>
+                        </div>
+                        <span className="text-rose-300">{formatCurrency(Number(item.amount || 0))}</span>
+                      </div>
+                    ))}
+                    {recentExpenses.length === 0 && <p className="text-slate-500">Sem saídas recentes.</p>}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-violet-500/20 bg-violet-500/10 p-4 md:col-span-2">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-sm font-semibold text-white">Fatura do proximo mes</p>
+                    <div className="text-right">
+                      <p className="text-[11px] text-violet-200/80">{nextMonthCardBill.month || 'Proximo mes'}</p>
+                      <AnimatedCurrency value={nextMonthCardBill.total} className="text-sm font-bold text-violet-200" />
+                    </div>
+                  </div>
+                  <div className="space-y-2 text-xs text-slate-300">
+                    {nextMonthCardBill.items.map((item: any) => (
+                      <div key={item.id} className="flex items-center justify-between gap-2 rounded-xl border border-violet-500/20 bg-slate-950/40 px-2 py-1.5">
+                        <span className="truncate">{cleanDescription(item.description)}</span>
+                        <span className="text-violet-200">{formatCurrency(Number(item.amount || 0))}</span>
+                      </div>
+                    ))}
+                    {nextMonthCardBill.items.length === 0 && <p className="text-slate-500">Nenhuma despesa de cartao pendente para a proxima fatura.</p>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <aside className="space-y-5">
+            <div className="rounded-3xl border border-slate-700/80 bg-slate-900/75 p-4 shadow-[0_16px_42px_rgba(2,8,23,0.5)] backdrop-blur-xl">
+              <div className="mb-3 flex items-center gap-2">
+                <Target size={16} className="text-cyan-300" />
+                <p className="text-sm font-semibold text-white">Metas e saude</p>
+              </div>
+              <div className="space-y-3 text-xs">
+                <div className="rounded-xl border border-slate-700 bg-slate-950/70 p-3">
+                  <div className="mb-1 flex items-center gap-2">
+                    <HeartPulse size={13} className="text-emerald-400" />
+                    <span className="text-slate-300">Contas e vencimentos</span>
+                  </div>
+                  <p className="text-slate-400">
+                    {summary.family.health.allBillsUpToDate ? 'Tudo em dia' : `${summary.family.health.overdueCount} em atraso`} • {summary.family.health.dueTodayCount} hoje
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-slate-700 bg-slate-950/70 p-3">
+                  <div className="mb-2 flex items-center gap-2">
+                    <PiggyBank size={13} className="text-emerald-400" />
+                    <span className="text-slate-300">Poupanca</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+                    <div className="h-full bg-gradient-to-r from-emerald-500 to-cyan-400" style={{ width: `${savingsProgress}%` }} />
+                  </div>
+                  <p className="mt-2 text-slate-400">
+                    {formatCurrency(savingsSaved)} de {formatCurrency(savingsTarget)}
+                  </p>
+
+                  <form onSubmit={handleSetSavingsBalance} className="mt-3 space-y-2">
+                    <label className="block text-[11px] text-slate-500">Editar poupanca</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={savingsInput}
+                        onChange={(e) => setSavingsInput(e.target.value)}
+                        placeholder="Saldo atual (ex: 3500,00)"
+                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
+                      />
+                      <input
+                        type="text"
+                        value={savingsTargetInput}
+                        onChange={(e) => setSavingsTargetInput(e.target.value)}
+                        placeholder="Meta (ex: 10000,00)"
+                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
+                      />
+                      <button
+                        type="submit"
+                        disabled={savingSavings}
+                        className="rounded-lg bg-emerald-500 px-2.5 py-1.5 text-[11px] font-semibold text-slate-950 disabled:opacity-60"
+                      >
+                        Editar
+                      </button>
+                    </div>
+                  </form>
+
+                  <div className="mt-3 space-y-2">
+                    <label className="block text-[11px] text-slate-500">Guardar sobra das entradas deste mes</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={surplusTransferInput}
+                        onChange={(e) => setSurplusTransferInput(e.target.value)}
+                        placeholder={`Vazio = guardar tudo (${formatCurrency(Math.max(Number(summary.cashFlow?.profit || 0), 0))})`}
+                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleSaveSurplusToSavings}
+                        disabled={savingSavings}
+                        className="rounded-lg bg-cyan-400 px-2.5 py-1.5 text-[11px] font-semibold text-slate-950 disabled:opacity-60"
+                      >
+                        Guardar
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 space-y-2">
+                    <label className="block text-[11px] text-slate-500">Retirar da poupanca para cobrir saldo negativo</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={withdrawSavingsInput}
+                        onChange={(e) => setWithdrawSavingsInput(e.target.value)}
+                        placeholder={`Vazio = cobrir automatico (${formatCurrency(Math.max(-Number(summary.balance?.total || 0), 0))})`}
+                        className="w-full rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleWithdrawFromSavings}
+                        disabled={savingSavings}
+                        className="rounded-lg bg-amber-400 px-2.5 py-1.5 text-[11px] font-semibold text-slate-950 disabled:opacity-60"
+                      >
+                        Retirar
+                      </button>
+                    </div>
+                  </div>
+
+                  {savingsMessage && <p className="mt-2 text-[11px] text-cyan-300">{savingsMessage}</p>}
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-slate-700/80 bg-slate-900/75 p-4 shadow-[0_16px_42px_rgba(2,8,23,0.5)] backdrop-blur-xl">
+              <p className="mb-3 text-sm font-semibold text-white">Categorias</p>
+              {categories.length > 0 ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <PieChart>
+                    <Pie data={categories} dataKey="total" nameKey="name" cx="50%" cy="50%" innerRadius={52} outerRadius={86}>
+                      {categories.map((_, index) => <Cell key={`slice-${index}`} fill={COLORS[index % COLORS.length]} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ backgroundColor: '#020617', border: '1px solid #334155', borderRadius: '10px' }} formatter={(value: any) => formatCurrency(Number(value || 0))} />
+                  </PieChart>
+                </ResponsiveContainer>
               ) : (
-                <p className="text-xs text-slate-400">Crie uma meta para acompanhar</p>
+                <p className="py-8 text-center text-sm text-slate-500">Sem despesas categorizadas.</p>
               )}
             </div>
 
-            <div className={`lg:col-span-1 p-6 rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/10 to-slate-900 backdrop-blur`}>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-emerald-500/20 rounded-lg">
-                  <PiggyBank size={18} className="text-emerald-400" />
-                </div>
-                <h2 className="text-sm font-bold text-white">Poupança</h2>
+            <div className="rounded-3xl border border-slate-700/80 bg-slate-900/75 p-4 shadow-[0_16px_42px_rgba(2,8,23,0.5)] backdrop-blur-xl">
+              <div className="mb-3 flex items-center gap-2">
+                <CalendarClock size={16} className="text-cyan-300" />
+                <p className="text-sm font-semibold text-white">Hoje</p>
               </div>
+              <p className="mb-3 text-xs text-slate-400">Total gasto: {formatCurrency(summary.family.dailyDigest.totalSpentToday)}</p>
               <div className="space-y-2">
-                <div className="flex justify-between">
-                  <span className="text-xs text-slate-400">Economizado</span>
-                  <span className="text-sm font-bold text-emerald-400">{formatCurrency(summary.family.savings.saved)}</span>
-                </div>
-                <div className="w-full h-2 bg-slate-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400" style={{ width: `${Math.min(summary.family.savings.progress, 100).toFixed(0)}%` }} />
-                </div>
-                <p className="text-xs text-slate-400">Meta: {formatCurrency(summary.family.savings.target)}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Charts Section */}
-          <div className={`p-6 rounded-2xl border border-cyan-500/20 bg-slate-900/50 backdrop-blur`}>
-            <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-              <div className="w-1 h-6 bg-gradient-to-b from-cyan-500 to-cyan-600 rounded-full" />
-              Evolução Mensal
-            </h2>
-            <ResponsiveContainer width="100%" height={320}>
-              <AreaChart data={evolution}>
-                <defs>
-                  <linearGradient id="income" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                  </linearGradient>
-                  <linearGradient id="expenses" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f87171" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#f87171" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="month" stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 12 }} />
-                <YAxis stroke="#64748b" tick={{ fill: '#94a3b8', fontSize: 12 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px' }}
-                  formatter={(v: any) => formatCurrency(v as number)}
-                />
-                <Legend wrapperStyle={{ color: '#cbd5e1' }} />
-                <Area type="monotone" dataKey="income" name="Entradas" stroke="#10b981" fill="url(#income)" strokeWidth={2} />
-                <Area type="monotone" dataKey="expenses" name="Saídas" stroke="#f87171" fill="url(#expenses)" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-
-          {/* Team Section */}
-          {teamReport && teamReport.members.length > 1 && (
-            <div className={`p-6 rounded-2xl border border-cyan-500/20 bg-slate-900/50 backdrop-blur`}>
-              <h2 className="text-lg font-bold text-white mb-6 flex items-center gap-2">
-                <div className="w-1 h-6 bg-gradient-to-b from-cyan-500 to-cyan-600 rounded-full" />
-                Lançamentos por Pessoa
-              </h2>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {teamReport.members.map((m: any) => (
-                  <div key={m.userId} className="bg-gradient-to-br from-slate-800/50 to-slate-900 rounded-xl p-4 border border-cyan-500/10">
-                    <div className="text-slate-400 text-xs font-semibold mb-2">{m.name}</div>
-                    <div className="text-emerald-400 font-bold text-sm">{formatCurrency(m.totalIncome)}</div>
-                    <div className="text-red-400 text-xs">{formatCurrency(m.totalExpense)}</div>
+                {summary.family.dailyDigest.transactions.slice(0, 4).map((tx) => (
+                  <div key={tx.id} className="rounded-xl border border-slate-700 bg-slate-950/70 p-2.5 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-slate-200">{tx.description}</p>
+                      <span className="text-rose-300">{formatCurrency(tx.amount)}</span>
+                    </div>
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <span className="text-[11px] text-slate-500">{tx.category}</span>
+                      <PaymentMethodChip method={tx.paymentMethod} />
+                    </div>
                   </div>
                 ))}
-              </div>
-            </div>
-          )}
-
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className={`p-6 ${panelClass}`}>
-          <h2 className="text-lg font-semibold text-white mb-4">🥧 Gastos do Mes</h2>
-          {categories.length > 0 ? (
-            <ResponsiveContainer width="100%" height={260}>
-              <PieChart>
-                <Pie data={categories} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="total" nameKey="name" label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false}>
-                  {categories.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }} formatter={(v: any) => formatCurrency(v as number)} />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="text-gray-500 text-center py-16">Nenhuma despesa este mês</p>
-          )}
-        </div>
-
-        <div className="space-y-4">
-          <div className={`p-6 ${panelClass}`}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-white">🔴 A Pagar</h2>
-              <AnimatedCurrency value={summary.payable.total} className="text-red-400 font-bold" />
-            </div>
-            {summary.payable.items.slice(0, 4).map((p: any) => (
-              <div key={p.id} className="flex justify-between text-sm py-2 border-b border-gray-800 last:border-0">
-                <span className="text-gray-300">{p.description}</span>
-                <div className="text-right">
-                  <div className="text-red-400">{formatCurrency(p.amount)}</div>
-                  <div className="text-gray-500 text-xs">{new Date(p.dueDate).toLocaleDateString('pt-BR')}</div>
-                </div>
-              </div>
-            ))}
-            {summary.payable.items.length === 0 && <p className="text-gray-500 text-sm">Nenhuma conta pendente ✅</p>}
-          </div>
-
-          <div className={`p-6 ${panelClass}`}>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-white">🟢 A Receber</h2>
-              <AnimatedCurrency value={summary.receivable.total} className="text-green-400 font-bold" />
-            </div>
-            {summary.receivable.items.slice(0, 4).map((p: any) => (
-              <div key={p.id} className="flex justify-between text-sm py-2 border-b border-gray-800 last:border-0">
-                <span className="text-gray-300">{p.description}</span>
-                <span className="text-green-400">{formatCurrency(p.amount)}</span>
-              </div>
-            ))}
-            {summary.receivable.items.length === 0 && <p className="text-gray-500 text-sm">Nenhum valor a receber</p>}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className={`p-6 ${panelClass}`}>
-          <div className="flex items-center gap-2 mb-4">
-            <TrendingDown size={18} className="text-orange-400" />
-            <h2 className="text-lg font-semibold text-white">Top Gastos Familiares</h2>
-          </div>
-          <div className="space-y-2">
-            {summary.family.topSpending.length > 0 ? summary.family.topSpending.map((item) => (
-              <div key={item.name} className="flex items-center justify-between text-sm border-b border-gray-800 pb-2">
-                <span className="text-gray-300">{item.name}</span>
-                <span className="text-white font-medium">{formatCurrency(item.amount)}</span>
-              </div>
-            )) : <p className="text-sm text-gray-500">Sem gastos no periodo.</p>}
-          </div>
-        </div>
-
-        <div className={`p-6 ${panelClass}`}>
-          <div className="flex items-center gap-2 mb-4">
-            <CalendarClock size={18} className="text-cyan-400" />
-            <h2 className="text-lg font-semibold text-white">Resumo de Hoje</h2>
-          </div>
-          <p className="text-sm text-gray-300 mb-3">Total gasto hoje: <span className="text-white font-semibold">{formatCurrency(summary.family.dailyDigest.totalSpentToday)}</span></p>
-          <div className="space-y-2">
-            {summary.family.dailyDigest.transactions.length > 0 ? summary.family.dailyDigest.transactions.map((tx) => (
-              <div key={tx.id} className="flex items-center justify-between text-sm border-b border-gray-800 pb-2">
-                <div>
-                  <p className="text-gray-200">{tx.description}</p>
-                  <div className="flex flex-wrap items-center gap-2 mt-1">
-                    <p className="text-xs text-gray-500">{tx.category}</p>
-                    <PaymentMethodChip method={tx.paymentMethod} />
-                  </div>
-                </div>
-                <span className="text-red-400">{formatCurrency(tx.amount)}</span>
-              </div>
-            )) : <p className="text-sm text-gray-500">Sem lancamentos hoje.</p>}
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className={`p-6 ${panelClass}`}>
-          <GoalsWidget />
-        </div>
-
-        <div className={`p-6 space-y-8 ${panelClass}`}>
-          <AIInsights />
-          <RecurringTransactions />
-        </div>
-      </div>
-
-
-      <div className={`p-6 ${panelClass}`}>
-        <h2 className="text-lg font-semibold text-white mb-4">🏦 Contas</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {summary.balance.accounts.map((acc: any) => (
-            <div key={acc.id} className="bg-gray-800 rounded-xl p-4">
-              <div className="text-gray-400 text-sm">{acc.type === 'CASH' ? '💵' : '🏦'} {acc.name}</div>
-              <div className={`text-lg font-bold mt-1 ${acc.balance >= 0 ? 'text-white' : 'text-red-400'}`}>
-                {formatCurrency(acc.balance)}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className={`p-6 ${panelClass}`}>
-        <h2 className="text-lg font-semibold text-white mb-4">Notificacoes da Familia</h2>
-
-        {!settings ? (
-          <p className="text-sm text-gray-500">Carregando configuracoes...</p>
-        ) : (
-          <form onSubmit={handleSaveSettings} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <label className="flex items-center justify-between bg-gray-800 rounded-lg p-3 text-sm">
-                <span className="text-gray-300">Lembretes de contas</span>
-                <input type="checkbox" checked={settings.remindersEnabled} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, remindersEnabled: e.target.checked }) : prev)} />
-              </label>
-              <label className="flex items-center justify-between bg-gray-800 rounded-lg p-3 text-sm">
-                <span className="text-gray-300">Alerta de caixa negativo</span>
-                <input type="checkbox" checked={settings.cashflowAlertEnabled} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, cashflowAlertEnabled: e.target.checked }) : prev)} />
-              </label>
-              <label className="flex items-center justify-between bg-gray-800 rounded-lg p-3 text-sm">
-                <span className="text-gray-300">Resumo diario</span>
-                <input type="checkbox" checked={settings.dailyDigestEnabled} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, dailyDigestEnabled: e.target.checked }) : prev)} />
-              </label>
-              <label className="flex items-center justify-between bg-gray-800 rounded-lg p-3 text-sm">
-                <span className="text-gray-300">Resumo semanal</span>
-                <input type="checkbox" checked={settings.weeklyDigestEnabled} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, weeklyDigestEnabled: e.target.checked }) : prev)} />
-              </label>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <div className="bg-gray-800 rounded-lg p-3">
-                <p className="text-xs text-gray-400 mb-1">Fuso horario</p>
-                <select value={settings.timezone} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, timezone: e.target.value }) : prev)} className="w-full bg-gray-900 border border-gray-700 text-white rounded px-2 py-1 text-sm">
-                  <option value="America/Sao_Paulo">America/Sao_Paulo</option>
-                  <option value="America/Manaus">America/Manaus</option>
-                  <option value="America/Belem">America/Belem</option>
-                  <option value="America/Fortaleza">America/Fortaleza</option>
-                  <option value="America/Cuiaba">America/Cuiaba</option>
-                </select>
-              </div>
-              <div className="bg-gray-800 rounded-lg p-3">
-                <p className="text-xs text-gray-400 mb-1">Hora lembretes (0-23)</p>
-                <input type="number" min="0" max="23" value={settings.remindersHour} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, remindersHour: Number(e.target.value) }) : prev)} className="w-full bg-gray-900 border border-gray-700 text-white rounded px-2 py-1 text-sm" />
-              </div>
-              <div className="bg-gray-800 rounded-lg p-3">
-                <p className="text-xs text-gray-400 mb-1">Hora resumo diario (0-23)</p>
-                <input type="number" min="0" max="23" value={settings.dailyDigestHour} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, dailyDigestHour: Number(e.target.value) }) : prev)} className="w-full bg-gray-900 border border-gray-700 text-white rounded px-2 py-1 text-sm" />
-              </div>
-              <div className="bg-gray-800 rounded-lg p-3">
-                <p className="text-xs text-gray-400 mb-1">Hora resumo semanal (0-23)</p>
-                <input type="number" min="0" max="23" value={settings.weeklyDigestHour} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, weeklyDigestHour: Number(e.target.value) }) : prev)} className="w-full bg-gray-900 border border-gray-700 text-white rounded px-2 py-1 text-sm" />
+                {summary.family.dailyDigest.transactions.length === 0 && <p className="text-xs text-slate-500">Sem lancamentos hoje.</p>}
               </div>
             </div>
 
-            <div className="bg-gray-800 rounded-lg p-3 max-w-xs">
-              <p className="text-xs text-gray-400 mb-1">Dia resumo semanal</p>
-              <select value={settings.weeklyDigestWeekday} onChange={(e) => setSettings((prev) => prev ? ({ ...prev, weeklyDigestWeekday: Number(e.target.value) }) : prev)} className="w-full bg-gray-900 border border-gray-700 text-white rounded px-2 py-1 text-sm">
-                <option value={0}>Domingo</option>
-                <option value={1}>Segunda</option>
-                <option value={2}>Terca</option>
-                <option value={3}>Quarta</option>
-                <option value={4}>Quinta</option>
-                <option value={5}>Sexta</option>
-                <option value={6}>Sabado</option>
-              </select>
-            </div>
-
-            <div className="bg-gray-800 rounded-lg p-3">
-              <p className="text-xs text-gray-400 mb-1">Ultimos envios</p>
-              <div className="text-xs text-gray-300 space-y-1">
-                <p>Lembretes: {settings.lastRemindersSentAt ? new Date(settings.lastRemindersSentAt).toLocaleString('pt-BR') : 'nunca'}</p>
-                <p>Resumo diario: {settings.lastDailyDigestSentAt ? new Date(settings.lastDailyDigestSentAt).toLocaleString('pt-BR') : 'nunca'}</p>
-                <p>Resumo semanal: {settings.lastWeeklyDigestSentAt ? new Date(settings.lastWeeklyDigestSentAt).toLocaleString('pt-BR') : 'nunca'}</p>
-              </div>
-            </div>
-
-            <button type="submit" disabled={savingSettings} className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-black font-semibold px-4 py-2 rounded-lg">
-              {savingSettings ? 'Salvando...' : 'Salvar configuracoes'}
-            </button>
-          </form>
-        )}
-      </div>
-
-      <div className={`p-6 ${panelClass}`}>
-        <h2 className="text-lg font-semibold text-white mb-4">Minha Conta</h2>
-
-        <form onSubmit={handleChangePassword} className="space-y-3 max-w-xl">
-          <div>
-            <label className="text-xs text-gray-400">Senha atual</label>
-            <div className="mt-1 flex gap-2">
-              <input
-                type={showCurrentPassword ? 'text' : 'password'}
-                value={accountForm.currentPassword}
-                onChange={(e) => setAccountForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
-                required
-              />
-              <button type="button" onClick={() => setShowCurrentPassword((v) => !v)} className="bg-gray-800 border border-gray-700 text-gray-200 rounded-lg px-3 py-2 text-xs">
-                {showCurrentPassword ? 'Ocultar' : 'Mostrar'}
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-400">Nova senha</label>
-            <div className="mt-1 flex gap-2">
-              <input
-                type={showNewPassword ? 'text' : 'password'}
-                value={accountForm.newPassword}
-                onChange={(e) => setAccountForm((prev) => ({ ...prev, newPassword: e.target.value }))}
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
-                required
-              />
-              <button type="button" onClick={() => setShowNewPassword((v) => !v)} className="bg-gray-800 border border-gray-700 text-gray-200 rounded-lg px-3 py-2 text-xs">
-                {showNewPassword ? 'Ocultar' : 'Mostrar'}
-              </button>
-            </div>
-            <p className="text-[11px] text-gray-500 mt-1">Requisitos: 8+ caracteres, maiuscula, minuscula, numero e simbolo.</p>
-          </div>
-
-          <div>
-            <label className="text-xs text-gray-400">Confirmar nova senha</label>
-            <div className="mt-1 flex gap-2">
-              <input
-                type={showConfirmPassword ? 'text' : 'password'}
-                value={accountForm.confirmNewPassword}
-                onChange={(e) => setAccountForm((prev) => ({ ...prev, confirmNewPassword: e.target.value }))}
-                className="w-full bg-gray-800 border border-gray-700 text-white rounded-lg px-3 py-2 text-sm"
-                required
-              />
-              <button type="button" onClick={() => setShowConfirmPassword((v) => !v)} className="bg-gray-800 border border-gray-700 text-gray-200 rounded-lg px-3 py-2 text-xs">
-                {showConfirmPassword ? 'Ocultar' : 'Mostrar'}
-              </button>
-            </div>
-          </div>
-
-          {accountMessage && (
-            <p className={`text-sm ${accountMessage.toLowerCase().includes('sucesso') ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {accountMessage}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={savingAccount}
-            className="bg-cyan-500 hover:bg-cyan-400 disabled:opacity-60 text-black font-semibold px-4 py-2 rounded-lg"
-          >
-            {savingAccount ? 'Salvando...' : 'Alterar senha'}
-          </button>
-        </form>
-      </div>
-
-      <div className={`p-6 space-y-4 ${panelClass}`}>
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-white">Diagnostico do Sistema</h2>
-          <button
-            type="button"
-            onClick={loadDiagnostics}
-            className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-200 px-3 py-2 rounded-lg"
-          >
-            Atualizar
-          </button>
-        </div>
-
-        {diagnosticError && (
-          <p className="text-sm text-rose-400">{diagnosticError}</p>
-        )}
-
-        {!systemHealth ? (
-          <p className="text-sm text-gray-500">Carregando diagnostico...</p>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-              <div className="bg-gray-800 rounded-lg p-3">
-                <p className="text-gray-400">Backend</p>
-                <p className={`${systemHealth.status === 'ok' ? 'text-emerald-400' : 'text-amber-400'} font-semibold`}>
-                  {systemHealth.status === 'ok' ? 'Saudavel' : 'Degradado'}
-                </p>
-                <p className="text-gray-500 text-xs mt-1">Uptime: {Math.floor(systemHealth.server.uptimeSec / 60)} min</p>
-              </div>
-
-              <div className="bg-gray-800 rounded-lg p-3">
-                <p className="text-gray-400">Banco</p>
-                <p className={`${systemHealth.database.status === 'ok' ? 'text-emerald-400' : 'text-rose-400'} font-semibold`}>
-                  {systemHealth.database.status === 'ok' ? 'Conectado' : 'Erro'}
-                </p>
-                {systemHealth.database.error && <p className="text-rose-400 text-xs mt-1">{systemHealth.database.error}</p>}
-              </div>
-
-              <div className="bg-gray-800 rounded-lg p-3">
-                <p className="text-gray-400">IA</p>
-                <p className="text-white font-semibold">{systemHealth.openai.mode}</p>
-                <p className="text-gray-500 text-xs mt-1">OpenAI {systemHealth.openai.configured ? 'configurada' : 'nao configurada'}</p>
-              </div>
-            </div>
-
-            {!systemHealth.whatsapp.enabled ? (
-              <div className="bg-gray-800 rounded-lg p-3 text-sm">
-                <p className="text-gray-300 mb-1">Canal de Automacao</p>
-                <p className="text-emerald-400 font-semibold">Modo app-only ativo</p>
-                <p className="text-gray-500 text-xs mt-1">WhatsApp desativado. Use lancamentos manuais em "Lancamentos".</p>
-              </div>
-            ) : (
-              <>
-                <div className="bg-gray-800 rounded-lg p-3 text-sm">
-                  <p className="text-gray-300 mb-2">WhatsApp Runtime</p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
-                    <p className="text-gray-400">Ativas: <span className="text-white">{systemHealth.whatsapp.runtime.activeCount}</span></p>
-                    <p className="text-gray-400">Conectadas: <span className="text-emerald-400">{systemHealth.whatsapp.runtime.connectedCount}</span></p>
-                    <p className="text-gray-400">Aguardando QR: <span className="text-amber-400">{systemHealth.whatsapp.runtime.qrPendingCount}</span></p>
-                  </div>
-                  <div className="mt-2 text-xs text-gray-400">
-                    <p>
-                      Reparo diario: <span className="text-white">{systemHealth.whatsapp.repairLimit.used}/{systemHealth.whatsapp.repairLimit.limit}</span>
-                      {' '}({systemHealth.whatsapp.repairLimit.remaining} restante{systemHealth.whatsapp.repairLimit.remaining === 1 ? '' : 's'})
-                    </p>
-                    <p>Janela iniciada em {new Date(systemHealth.whatsapp.repairLimit.periodStart).toLocaleString('pt-BR')}</p>
-                  </div>
-                </div>
-
+            {teamReport && teamReport.members.length > 0 && (
+              <div className="rounded-3xl border border-slate-700/80 bg-slate-900/75 p-4 shadow-[0_16px_42px_rgba(2,8,23,0.5)] backdrop-blur-xl">
+                <p className="mb-3 text-sm font-semibold text-white">Familia</p>
                 <div className="space-y-2">
-                  <p className="text-sm text-gray-300">Sessoes do Tenant</p>
-                  {systemHealth.whatsapp.tenantSessions.length === 0 ? (
-                    <p className="text-sm text-gray-500">Nenhuma sessao cadastrada.</p>
-                  ) : systemHealth.whatsapp.tenantSessions.map((session) => (
-                    <div key={session.id} className="bg-gray-800 rounded-lg p-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-                      <div>
-                        <p className="text-sm text-white">{session.phoneNumber}</p>
-                        <p className="text-xs text-gray-400">
-                          {session.isActive ? 'Ativa' : 'Inativa'}
-                          {session.connectedAt ? ` • conectada em ${new Date(session.connectedAt).toLocaleString('pt-BR')}` : ''}
-                        </p>
+                  {teamReport.members.slice(0, 4).map((member: any) => (
+                    <div key={member.userId} className="rounded-xl border border-slate-700 bg-slate-950/70 p-2.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-slate-300">{member.name}</span>
+                        <span className="text-emerald-300">{formatCurrency(member.totalIncome)}</span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRepairSession(session.id)}
-                        disabled={repairingSessionId === session.id}
-                        className="bg-amber-500 hover:bg-amber-400 disabled:opacity-60 text-black font-semibold px-3 py-2 rounded-lg text-xs"
-                      >
-                        {repairingSessionId === session.id ? 'Reparando...' : 'Reparar sessao'}
-                      </button>
+                      <p className="mt-1 text-[11px] text-rose-300">Saidas: {formatCurrency(member.totalExpense)}</p>
                     </div>
                   ))}
                 </div>
-
-                <div className="bg-gray-800 rounded-lg p-3">
-                  <p className="text-sm text-gray-300 mb-2">Auditoria de Reparo (ultimos eventos)</p>
-                  {systemHealth.whatsapp.repairAudit.length === 0 ? (
-                    <p className="text-xs text-gray-500">Nenhum reparo registrado nesta execucao.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {systemHealth.whatsapp.repairAudit.slice(0, 8).map((item, idx) => (
-                        <div key={`${item.at}-${item.sessionId}-${idx}`} className="text-xs text-gray-300 border-b border-gray-700 pb-2 last:border-0">
-                          <p>
-                            <span className={`${item.outcome === 'SUCCESS' ? 'text-emerald-400' : item.outcome === 'FAILED' ? 'text-rose-400' : 'text-amber-400'} font-semibold`}>
-                              {item.outcome}
-                            </span>
-                            {' '}• {item.phoneNumber} • {new Date(item.at).toLocaleString('pt-BR')}
-                          </p>
-                          {item.actor?.email && <p className="text-gray-500">por {item.actor.email}</p>}
-                          {item.error && <p className="text-rose-400">erro: {item.error}</p>}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {repairQr && (
-                  <div className="bg-gray-800 rounded-lg p-3">
-                    <p className="text-sm text-gray-300 mb-2">Novo QR de reparo</p>
-                    <img src={repairQr} alt="QR Code de reparo" className="w-64 h-64 bg-white p-2 rounded" />
-                  </div>
-                )}
-              </>
+              </div>
             )}
-          </>
-        )}
+
+            <div className="rounded-3xl border border-slate-700/80 bg-slate-900/75 p-4 shadow-[0_16px_42px_rgba(2,8,23,0.5)] backdrop-blur-xl">
+              <GoalsWidget />
+            </div>
+
+            <div className="rounded-3xl border border-slate-700/80 bg-slate-900/75 p-4 shadow-[0_16px_42px_rgba(2,8,23,0.5)] backdrop-blur-xl">
+              <AIInsights />
+            </div>
+
+            <div className="rounded-3xl border border-slate-700/80 bg-slate-900/75 p-4 shadow-[0_16px_42px_rgba(2,8,23,0.5)] backdrop-blur-xl">
+              <RecurringTransactions />
+            </div>
+          </aside>
+        </div>
       </div>
     </div>
   )

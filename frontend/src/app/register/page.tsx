@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/contexts/ToastContext'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Mail, Lock, User, Loader, Eye, EyeOff } from 'lucide-react'
 
 export default function RegisterPage() {
@@ -17,12 +18,12 @@ export default function RegisterPage() {
     e.preventDefault()
     
     if (!form.name) {
-      addToast('Informe o nome da sua família ou empresa.', 'warning')
+      addToast('Informe o nome da sua familia ou empresa.', 'warning')
       return
     }
     
     if (form.password.length < 8) {
-      addToast('Senha deve ter no mínimo 8 caracteres.', 'warning')
+      addToast('Senha deve ter no minimo 8 caracteres.', 'warning')
       return
     }
 
@@ -48,11 +49,19 @@ export default function RegisterPage() {
       <div className="w-full max-w-md relative z-10">
         {/* Logo & Title */}
         <div className="text-center mb-8">
-          <div className="inline-block p-4 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 border border-cyan-500/30 rounded-2xl mb-4">
-            <span className="text-4xl font-black text-cyan-400">MF</span>
+          <div className="inline-flex items-center justify-center p-2.5 bg-gradient-to-br from-cyan-500/16 to-emerald-500/14 border border-cyan-500/30 rounded-3xl mb-4 shadow-[0_16px_38px_rgba(34,211,238,0.22)]">
+            <Image
+              src="/financeiroai-logo.svg?v=20260708r3"
+              alt="FinanceiroAI"
+              width={84}
+              height={84}
+              priority
+              className="rounded-2xl"
+            />
           </div>
-          <h1 className="text-4xl font-black text-white">MeuFinanceiro</h1>
-          <p className="text-slate-400 mt-2 text-sm">Comece a controlar suas finanças</p>
+          <h1 className="text-4xl font-black text-white tracking-tight">FinanceiroAI</h1>
+          <p className="text-slate-400 mt-2 text-sm">Comece a controlar suas financas</p>
+          <p className="text-[11px] mt-1 uppercase tracking-[0.28em] text-cyan-300/70">Smart Money OS</p>
         </div>
 
         {/* Form */}
@@ -61,7 +70,7 @@ export default function RegisterPage() {
 
           {/* Name Field */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Nome da família / empresa</label>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Nome da familia / empresa</label>
             <div className="relative">
               <User className="absolute left-3 top-3.5 text-slate-500" size={18} />
               <input
@@ -70,7 +79,7 @@ export default function RegisterPage() {
                 onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))}
                 required
                 className="w-full bg-slate-800/50 border border-cyan-700/30 text-white rounded-lg px-10 py-3 placeholder-slate-500 focus:border-cyan-500/60 focus:outline-none transition"
-                placeholder="Ex: Família Silva"
+                placeholder="Ex: Familia Silva"
               />
             </div>
           </div>
@@ -93,7 +102,7 @@ export default function RegisterPage() {
 
           {/* Password Field */}
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Senha (mínimo 8 caracteres)</label>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Senha (minimo 8 caracteres)</label>
             <div className="relative">
               <Lock className="absolute left-3 top-3.5 text-slate-500" size={18} />
               <input
@@ -102,7 +111,7 @@ export default function RegisterPage() {
                 onChange={e => setForm(prev => ({ ...prev, password: e.target.value }))}
                 required
                 className="w-full bg-slate-800/50 border border-cyan-700/30 text-white rounded-lg px-10 py-3 placeholder-slate-500 focus:border-cyan-500/60 focus:outline-none transition"
-                placeholder="••••••••"
+                placeholder="********"
               />
               <button
                 type="button"
@@ -116,7 +125,7 @@ export default function RegisterPage() {
 
           {/* Info Box */}
           <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-lg p-3 text-xs text-cyan-300">
-            ✓ Plano gratuito inclui: Dashboard completo, PDF de relatórios, metas financeiras
+            Plano gratuito inclui: Dashboard completo, PDF de relatorios, metas financeiras
           </div>
 
           {/* Submit Button */}
@@ -126,14 +135,14 @@ export default function RegisterPage() {
             className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 disabled:opacity-60 text-white font-semibold py-3 rounded-lg transition flex items-center justify-center gap-2 mt-6"
           >
             {loading && <Loader size={18} className="animate-spin" />}
-            {loading ? 'Criando...' : 'Criar conta grátis'}
+            {loading ? 'Criando...' : 'Criar conta gratis'}
           </button>
         </form>
 
         {/* Footer Links */}
         <div className="mt-6 text-center space-y-3">
           <p className="text-slate-400 text-sm">
-            Já tem conta?{' '}
+            Ja tem conta?{' '}
             <Link href="/login" className="text-cyan-400 hover:text-cyan-300 font-semibold transition">
               Entrar
             </Link>
@@ -143,4 +152,5 @@ export default function RegisterPage() {
     </div>
   )
 }
+
 

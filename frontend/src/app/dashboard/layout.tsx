@@ -7,7 +7,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, ArrowUpDown, Calendar, Users, LogOut, TrendingUp, Menu, X
+  LayoutDashboard, ArrowUpDown, Users, LogOut, TrendingUp, Menu, X, ReceiptText
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ThemeToggle from '@/components/ThemeToggle'
@@ -15,8 +15,8 @@ import ThemeToggle from '@/components/ThemeToggle'
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/transactions', label: 'Lançamentos', icon: ArrowUpDown },
+  { href: '/dashboard/bills', label: 'Faturas', icon: ReceiptText },
   { href: '/dashboard/cashflow', label: 'Fluxo de Caixa', icon: TrendingUp },
-  { href: '/dashboard/scheduled', label: 'Agendamentos', icon: Calendar },
   { href: '/dashboard/team', label: 'Equipe', icon: Users },
 ]
 
@@ -34,8 +34,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     setMobileMenuOpen(false)
   }, [pathname])
 
+  const isNavItemActive = (href: string) => {
+    if (href === '/dashboard') return pathname === href
+    return pathname === href || pathname.startsWith(`${href}/`)
+  }
+
   const currentSection = useMemo(() => {
-    const found = navItems.find((item) => pathname === item.href || pathname.startsWith(`${item.href}/`))
+    const found = navItems.find((item) => isNavItemActive(item.href))
     return found?.label ?? 'Dashboard'
   }, [pathname])
 
@@ -48,7 +53,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const renderNavLinks = (mobile = false) => (
     <nav className={cn('space-y-1', mobile ? 'p-4' : 'p-4')}>
       {navItems.map(({ href, label, icon: Icon }, index) => {
-        const active = pathname === href || pathname.startsWith(`${href}/`)
+        const active = isNavItemActive(href)
         return (
           <Link
             key={href}
@@ -80,7 +85,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <aside className="hidden md:flex md:w-72 md:flex-col m-4 mr-0 rounded-3xl border border-cyan-500/20 bg-slate-900/80 backdrop-blur-xl shadow-[0_18px_55px_rgba(2,8,23,0.45)]">
         <div className="p-6 border-b border-cyan-500/15">
           <div className="flex items-center gap-4">
-            <Image src="/financeiroai-logo.svg" alt="FinanceiroAI" width={52} height={52} className="rounded-2xl shadow-[0_8px_24px_rgba(34,211,238,0.2)]" />
+            <Image src="/financeiroai-logo.svg?v=20260708r3" alt="FinanceiroAI" width={52} height={52} className="rounded-2xl shadow-[0_8px_24px_rgba(34,211,238,0.2)]" />
             <div>
               <div className="text-lg font-black text-cyan-300 leading-tight">FinanceiroAI</div>
               <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Neuro Finance Bot</p>
@@ -109,8 +114,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      <main className="flex-1 m-0 md:m-4 md:ml-4 overflow-auto">
-        <div className="md:hidden sticky top-0 z-30 border-b border-cyan-500/15 bg-slate-950/90 backdrop-blur px-4 py-3 flex items-center justify-between">
+      <main className="flex-1 m-0 md:m-4 md:ml-4 overflow-x-hidden overflow-y-auto pb-28 md:pb-0">
+        <div
+          className="md:hidden sticky top-0 z-30 border-b border-cyan-500/15 bg-slate-950/90 backdrop-blur px-4 pb-3 flex items-center justify-between"
+          style={{ paddingTop: 'calc(var(--safe-area-inset-top) + 8px)' }}
+        >
           <div>
             <p className="text-xs text-slate-500 uppercase tracking-[0.22em]">Painel Financeiro</p>
             <p className="text-sm font-semibold text-cyan-200">{currentSection}</p>
@@ -132,7 +140,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             >
               <div className="p-6 border-b border-cyan-500/15">
                 <div className="flex items-center gap-3">
-                  <Image src="/financeiroai-logo.svg" alt="FinanceiroAI" width={42} height={42} className="rounded-xl shadow-[0_6px_18px_rgba(34,211,238,0.18)]" />
+                  <Image src="/financeiroai-logo.svg?v=20260708r3" alt="FinanceiroAI" width={42} height={42} className="rounded-xl shadow-[0_6px_18px_rgba(34,211,238,0.18)]" />
                   <div>
                     <div className="text-base font-black text-cyan-300">FinanceiroAI</div>
                     <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Neuro Finance Bot</p>
@@ -172,6 +180,37 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
       </main>
       </div>
+
+      <div
+        className="md:hidden fixed z-40 rounded-2xl border border-cyan-500/30 bg-slate-900/90 px-2 py-2 backdrop-blur-xl shadow-[0_16px_38px_rgba(2,8,23,0.65)]"
+        style={{
+          left: 'var(--safe-area-inset-left)',
+          right: 'var(--safe-area-inset-right)',
+          bottom: 'var(--safe-area-inset-bottom)'
+        }}
+      >
+        <div className="grid grid-cols-5 gap-1.5">
+          {navItems.map(({ href, label, icon: Icon }) => {
+            const active = isNavItemActive(href)
+            return (
+              <Link
+                key={href}
+                href={href}
+                className={cn(
+                  'flex min-h-[64px] flex-col items-center justify-center gap-1 rounded-xl border px-1 py-2 text-center text-[9px] font-medium transition-all',
+                  active
+                    ? 'border-cyan-400/35 bg-cyan-400/18 text-cyan-100 shadow-[0_8px_20px_rgba(34,211,238,0.18)]'
+                    : 'border-transparent text-slate-400 hover:bg-slate-800/70 hover:text-slate-200'
+                )}
+              >
+                <Icon size={16} />
+                <span className="line-clamp-2 leading-tight">{label}</span>
+              </Link>
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }
+

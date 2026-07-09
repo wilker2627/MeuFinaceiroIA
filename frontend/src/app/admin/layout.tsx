@@ -31,7 +31,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex">
       <aside className="w-72 border-r border-slate-800 bg-slate-900/80 p-5 flex flex-col">
-        <h1 className="text-xl font-bold text-cyan-300">FinanceIA Admin</h1>
+        <h1 className="text-xl font-bold text-cyan-300">FinanceiroAI Admin</h1>
         <p className="text-xs text-slate-400 mt-1">Painel exclusivo de operacao</p>
 
         <nav className="mt-6 space-y-1">

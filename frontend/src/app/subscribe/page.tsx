@@ -111,7 +111,7 @@ export default function SubscribePage() {
       <div className="max-w-5xl mx-auto space-y-6">
         <header className="text-center">
           <div className="flex justify-center mb-4">
-            <Image src="/financeiroai-logo.svg" alt="FinanceiroAI" width={116} height={116} className="rounded-[1.8rem] shadow-[0_16px_44px_rgba(34,211,238,0.30)]" />
+            <Image src="/financeiroai-logo.svg?v=20260708r3" alt="FinanceiroAI" width={116} height={116} className="rounded-[1.8rem] shadow-[0_16px_44px_rgba(34,211,238,0.30)]" />
           </div>
           <h1 className="text-5xl md:text-6xl font-black tracking-tight text-cyan-300">FinanceiroAI</h1>
           <p className="text-gray-400 mt-2">Escolha o plano, cadastre-se, pague e comece em minutos.</p>
@@ -192,3 +192,4 @@ export default function SubscribePage() {
     </div>
   )
 }
+

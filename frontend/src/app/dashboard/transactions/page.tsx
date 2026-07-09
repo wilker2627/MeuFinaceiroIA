@@ -1,20 +1,28 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import api from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
-import { Plus, Trash2, Search, CreditCard, Wallet, QrCode, Loader } from 'lucide-react'
+import { Plus, Trash2, Search, CreditCard, Wallet, QrCode, Loader, ChevronDown, ChevronRight } from 'lucide-react'
 import ConfirmModal from '@/components/ConfirmModal'
 import EmptyState, { LoadingSkeleton } from '@/components/EmptyState'
 import ExportData from '@/components/ExportData'
 import { validateAmount, validateDescription } from '@/lib/exportUtils'
+import { triggerDashboardRefresh } from '@/lib/dashboardRefresh'
 
 interface Transaction {
   id: string; type: string; amount: number; description: string
   paymentMethod?: 'PIX' | 'CASH' | 'CREDIT_CARD' | 'DEBIT_CARD'
+  isPaid?: boolean
+  dueDate?: string
+  installments?: number | null
+  installmentNumber?: number | null
+  groupId?: string | null
   date: string; category?: { name: string; color: string }
   account?: { name: string }; user?: { name: string }
+  from?: { name: string }
+  to?: { name: string }
 }
 
 const PAYMENT_METHODS = [
@@ -33,6 +41,28 @@ const PAYMENT_METHOD_META: Record<string, { label: string; icon: any; className:
 
 const getPaymentMethodMeta = (method?: string) => PAYMENT_METHOD_META[method || 'CASH'] || PAYMENT_METHOD_META.CASH
 
+const PERSON_TAG_REGEX = /\|\s*Pessoa:\s*(.+)$/i
+
+function extractPersonFromDescription(description: string) {
+  const match = String(description || '').match(PERSON_TAG_REGEX)
+  return match?.[1]?.trim() || ''
+}
+
+function cleanDescription(description: string) {
+  return String(description || '').replace(PERSON_TAG_REGEX, '').trim()
+}
+
+function getInvoiceMonthKey(tx: Transaction) {
+  if (tx.paymentMethod !== 'CREDIT_CARD' || !tx.dueDate) return null
+  const dueDate = new Date(tx.dueDate)
+  return `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}`
+}
+
+function formatInvoiceMonth(monthKey: string) {
+  const [year, month] = monthKey.split('-').map(Number)
+  return new Date(year, month - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+}
+
 export default function TransactionsPage() {
   const { addToast } = useToast()
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -41,16 +71,75 @@ export default function TransactionsPage() {
   const [typeFilter, setTypeFilter] = useState('')
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ type: 'EXPENSE', amount: '', description: '', categoryId: '', paymentMethod: 'CASH' })
+  const [form, setForm] = useState({ type: 'EXPENSE', amount: '', description: '', categoryId: '', paymentMethod: 'CASH', personName: '', installments: '1', creditBillingOption: '1' })
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [categories, setCategories] = useState<any[]>([])
   const [accounts, setAccounts] = useState<any[]>([])
   const [saving, setSaving] = useState(false)
-  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; txId: string | null }>({ open: false, txId: null })
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; txIds: string[] }>({ open: false, txIds: [] })
   const [deleting, setDeleting] = useState(false)
+  const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([])
   const panelClass = 'dashboard-panel rounded-2xl border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.45)]'
   const selectedFormPayment = getPaymentMethodMeta(form.paymentMethod)
   const selectedFilterPayment = paymentMethodFilter ? getPaymentMethodMeta(paymentMethodFilter) : null
+  const isCreditExpense = form.type === 'EXPENSE' && form.paymentMethod === 'CREDIT_CARD'
+  const allVisibleSelected = transactions.length > 0 && transactions.every((tx) => selectedTransactionIds.includes(tx.id))
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+
+  const getResponsibleName = (tx: Transaction) => tx.user?.name || tx.from?.name || tx.to?.name || extractPersonFromDescription(tx.description) || 'Sem responsavel'
+
+  const getEffectiveDate = (tx: Transaction) => tx.type === 'EXPENSE' && tx.isPaid === false && tx.dueDate ? tx.dueDate : tx.date
+
+  const groupedTransactions = useMemo(() => {
+    const invoiceMap = new Map<string, { monthKey: string; label: string; total: number; items: Transaction[] }>()
+    const regularItems: Transaction[] = []
+
+    transactions.forEach((tx) => {
+      const invoiceMonthKey = getInvoiceMonthKey(tx)
+      if (!invoiceMonthKey) {
+        regularItems.push(tx)
+        return
+      }
+
+      const existing = invoiceMap.get(invoiceMonthKey)
+      if (existing) {
+        existing.items.push(tx)
+        existing.total += Number(tx.amount || 0)
+        return
+      }
+
+      invoiceMap.set(invoiceMonthKey, {
+        monthKey: invoiceMonthKey,
+        label: formatInvoiceMonth(invoiceMonthKey),
+        total: Number(tx.amount || 0),
+        items: [tx],
+      })
+    })
+
+    const invoiceGroups = Array.from(invoiceMap.values())
+      .map((group) => ({
+        ...group,
+        items: group.items.sort((a, b) => {
+          const dateDiff = new Date(getEffectiveDate(a)).getTime() - new Date(getEffectiveDate(b)).getTime()
+          if (dateDiff !== 0) return dateDiff
+          return Number(a.installmentNumber || 0) - Number(b.installmentNumber || 0)
+        })
+      }))
+      .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+
+    return { invoiceGroups, regularItems }
+  }, [transactions])
+
+  useEffect(() => {
+    setOpenGroups((prev) => {
+      const next = { ...prev }
+      groupedTransactions.invoiceGroups.forEach((group) => {
+        if (!(group.monthKey in next)) next[group.monthKey] = false
+      })
+      if (groupedTransactions.regularItems.length > 0 && !('regular' in next)) next.regular = true
+      return next
+    })
+  }, [groupedTransactions])
 
   async function load() {
     setLoading(true)
@@ -63,7 +152,9 @@ export default function TransactionsPage() {
       api.get('/dashboard/categories?catalog=1'),
       api.get('/dashboard/accounts'),
     ])
-    setTransactions(t.data.transactions)
+    const nextTransactions = t.data.transactions
+    setTransactions(nextTransactions)
+    setSelectedTransactionIds((prev) => prev.filter((id) => nextTransactions.some((tx: Transaction) => tx.id === id)))
     setCategories(c.data)
     setAccounts(a.data)
     setLoading(false)
@@ -90,11 +181,30 @@ export default function TransactionsPage() {
     setFormErrors({})
     setSaving(true)
     try {
-      await api.post('/dashboard/transactions', { ...form, accountId: accounts[0]?.id })
+      const installments = isCreditExpense ? Math.min(Math.max(parseInt(form.creditBillingOption) || 1, 1), 12) : 1
+      const baseAmount = Number(form.amount)
+      const baseDescription = form.personName.trim() ? `${form.description} | Pessoa: ${form.personName.trim()}` : form.description
+      const currentBillDate = isCreditExpense && form.creditBillingOption === 'CURRENT_BILL' ? new Date() : undefined
+
+      await api.post('/dashboard/transactions', {
+        type: form.type,
+        amount: baseAmount,
+        description: baseDescription,
+        categoryId: form.categoryId || undefined,
+        paymentMethod: form.paymentMethod,
+        accountId: isCreditExpense ? undefined : (accounts[0]?.id || undefined),
+        personName: form.personName.trim() || undefined,
+        installments,
+        isPaid: isCreditExpense ? false : true,
+        dueDate: currentBillDate ? currentBillDate.toISOString() : undefined,
+        date: currentBillDate ? currentBillDate.toISOString() : undefined,
+      })
+
       addToast(`${form.type === 'EXPENSE' ? 'Despesa' : 'Entrada'} registrada com sucesso!`, 'success')
       setShowForm(false)
-      setForm({ type: 'EXPENSE', amount: '', description: '', categoryId: '', paymentMethod: 'CASH' })
+      setForm({ type: 'EXPENSE', amount: '', description: '', categoryId: '', paymentMethod: 'CASH', personName: '', installments: '1', creditBillingOption: '1' })
       load()
+      triggerDashboardRefresh()
     } catch (err: any) {
       addToast(err.response?.data?.error || 'Erro ao salvar lançamento.', 'error')
     } finally {
@@ -103,19 +213,93 @@ export default function TransactionsPage() {
   }
 
   async function handleDeleteConfirm() {
-    if (!deleteConfirm.txId) return
+    if (deleteConfirm.txIds.length === 0) return
     
     setDeleting(true)
     try {
-      await api.delete(`/dashboard/transactions/${deleteConfirm.txId}`)
-      addToast('Lançamento removido com sucesso.', 'success')
-      setDeleteConfirm({ open: false, txId: null })
+      if (deleteConfirm.txIds.length === 1) {
+        await api.delete(`/dashboard/transactions/${deleteConfirm.txIds[0]}`)
+      } else {
+        await api.post('/dashboard/transactions/bulk-delete', { ids: deleteConfirm.txIds })
+      }
+      addToast(deleteConfirm.txIds.length === 1 ? 'Lançamento removido com sucesso.' : 'Lançamentos removidos com sucesso.', 'success')
+      setDeleteConfirm({ open: false, txIds: [] })
+      setSelectedTransactionIds([])
       load()
+      triggerDashboardRefresh()
     } catch (err: any) {
       addToast(err.response?.data?.error || 'Erro ao remover lançamento.', 'error')
     } finally {
       setDeleting(false)
     }
+  }
+
+  function toggleTransactionSelection(txId: string) {
+    setSelectedTransactionIds((prev) => prev.includes(txId) ? prev.filter((id) => id !== txId) : [...prev, txId])
+  }
+
+  function toggleSelectAllVisible() {
+    if (allVisibleSelected) {
+      setSelectedTransactionIds([])
+      return
+    }
+    setSelectedTransactionIds(transactions.map((tx) => tx.id))
+  }
+
+  function toggleGroup(groupKey: string) {
+    setOpenGroups((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }))
+  }
+
+  function renderTransactionItem(tx: Transaction) {
+    const isSelected = selectedTransactionIds.includes(tx.id)
+
+    return (
+      <div key={tx.id} className="rounded-xl border border-cyan-500/10 bg-slate-950/70 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => toggleTransactionSelection(tx.id)}
+              className="mt-1 h-4 w-4 rounded border-slate-600 bg-slate-950 text-cyan-400"
+            />
+            <div>
+              <p className="text-white font-medium">{cleanDescription(tx.description)}</p>
+              <div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-400">
+                <span>{formatDate(getEffectiveDate(tx))}</span>
+                <span>{getResponsibleName(tx)}</span>
+                {tx.installments && tx.installments > 1 && (
+                  <span>{tx.installmentNumber || 1}/{tx.installments}</span>
+                )}
+                {tx.type === 'EXPENSE' && tx.isPaid === false && tx.dueDate && (
+                  <span className="text-amber-300">Acumula para {formatDate(tx.dueDate)}</span>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className={`font-semibold ${tx.type === 'INCOME' ? 'text-green-400' : 'text-red-400'}`}>
+              {tx.type === 'INCOME' ? '+' : '-'}{formatCurrency(tx.amount)}
+            </p>
+            <div className="mt-2 flex items-center justify-end gap-2">
+              <PaymentMethodChip meta={getPaymentMethodMeta(tx.paymentMethod)} />
+              <button onClick={() => setDeleteConfirm({ open: true, txIds: [tx.id] })} className="text-slate-500 hover:text-red-400 transition-colors">
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="mt-3">
+          {tx.category ? (
+            <span className="px-2 py-1 rounded-full text-xs text-white" style={{ backgroundColor: tx.category.color + '40', color: tx.category.color }}>
+              {tx.category.name}
+            </span>
+          ) : (
+            <span className="text-xs text-slate-600">Sem categoria</span>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -130,17 +314,38 @@ export default function TransactionsPage() {
           <h1 className="text-2xl md:text-3xl font-black text-white">Lançamentos</h1>
           <p className="text-slate-400 text-sm mt-1">{transactions.length} transações encontradas</p>
         </div>
-        <button
-          onClick={() => setShowForm(!showForm)}
-          className="flex items-center gap-2 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-semibold px-4 py-2 rounded-lg transition-colors"
-        >
-          <Plus size={18} /> Novo Lançamento
-        </button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {transactions.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={toggleSelectAllVisible}
+                className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-800"
+              >
+                {allVisibleSelected ? 'Limpar selecao' : 'Selecionar todos'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirm({ open: true, txIds: selectedTransactionIds })}
+                disabled={selectedTransactionIds.length === 0}
+                className="inline-flex items-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-300 transition hover:bg-rose-500/20 disabled:opacity-50"
+              >
+                <Trash2 size={16} /> Excluir selecionados
+              </button>
+            </>
+          )}
+          <button
+            onClick={() => setShowForm(!showForm)}
+            className="flex items-center gap-2 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-semibold px-4 py-2 rounded-lg transition-colors"
+          >
+            <Plus size={18} /> Novo Lançamento
+          </button>
+        </div>
       </div>
 
       {/* Formulário */}
       {showForm && (
-        <form onSubmit={handleAdd} className={`p-6 grid grid-cols-2 md:grid-cols-5 gap-4 ${panelClass}`}>
+        <form onSubmit={handleAdd} className={`p-6 grid grid-cols-2 md:grid-cols-6 gap-4 ${panelClass}`}>
           <div>
             <label className="text-gray-400 text-sm block mb-1">Tipo</label>
             <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}
@@ -182,6 +387,11 @@ export default function TransactionsPage() {
             {formErrors.description && <p className="text-rose-400 text-xs mt-1">{formErrors.description}</p>}
           </div>
           <div>
+            <label className="text-gray-400 text-sm block mb-1">Pessoa</label>
+            <input type="text" value={form.personName} onChange={e => setForm(p => ({ ...p, personName: e.target.value }))}
+              className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2" placeholder="Ex: Maria" />
+          </div>
+          <div>
             <label className="text-gray-400 text-sm block mb-1">Categoria</label>
             <select value={form.categoryId} onChange={e => setForm(p => ({ ...p, categoryId: e.target.value }))}
               className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
@@ -203,6 +413,18 @@ export default function TransactionsPage() {
               <PaymentMethodChip meta={selectedFormPayment} />
             </div>
           </div>
+          {isCreditExpense && (
+            <div>
+              <label className="text-gray-400 text-sm block mb-1">Fatura do cartao</label>
+              <select value={form.creditBillingOption} onChange={e => setForm(p => ({ ...p, creditBillingOption: e.target.value }))}
+                className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
+                <option value="CURRENT_BILL">Fatura atual</option>
+                {Array.from({ length: 12 }, (_, index) => index + 1).map((value) => (
+                  <option key={value} value={String(value)}>{value}x</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="flex items-end gap-2">
             <button type="submit" disabled={saving} className="bg-cyan-400 hover:bg-cyan-300 disabled:opacity-60 text-slate-950 font-semibold px-4 py-2 rounded-lg flex items-center gap-2">
               {saving && <Loader size={16} className="animate-spin" />}
@@ -248,7 +470,7 @@ export default function TransactionsPage() {
         />
       </div>
 
-      {/* Tabela */}
+      {/* Lancamentos agrupados */}
       <div className={`${panelClass} overflow-hidden`}>
         {loading ? (
           <div className="p-6">
@@ -266,98 +488,84 @@ export default function TransactionsPage() {
             }}
           />
         ) : (
-          <>
-            <div className="md:hidden divide-y divide-cyan-500/15">
-              {transactions.map((tx) => (
-                <div key={tx.id} className="p-4 space-y-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-white font-medium">{tx.description}</p>
-                      <p className="text-xs text-slate-400 mt-1">{formatDate(tx.date)}</p>
-                    </div>
-                    <div className={`text-sm font-semibold ${tx.type === 'INCOME' ? 'text-green-400' : 'text-red-400'}`}>
-                      {tx.type === 'INCOME' ? '+' : '-'}{formatCurrency(tx.amount)}
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {tx.category ? (
-                      <span className="px-2 py-1 rounded-full text-xs text-white" style={{ backgroundColor: tx.category.color + '40', color: tx.category.color }}>
-                        {tx.category.name}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-600">Sem categoria</span>
-                    )}
-                    <PaymentMethodChip meta={getPaymentMethodMeta(tx.paymentMethod)} />
-                    <span className="text-xs text-slate-400">{tx.user?.name || 'Sem responsável'}</span>
-                  </div>
-
-                  <button
-                    onClick={() => setDeleteConfirm({ open: true, txId: tx.id })}
-                    className="w-full inline-flex items-center justify-center gap-2 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-300 hover:bg-rose-500/20 transition-colors"
-                  >
-                    <Trash2 size={15} />
-                    Excluir lançamento
-                  </button>
-                </div>
-              ))}
+          <div className="space-y-4 p-4 md:p-6">
+            <div className="flex items-center gap-3 rounded-xl border border-cyan-500/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-300">
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={toggleSelectAllVisible}
+                className="h-4 w-4 rounded border-slate-600 bg-slate-950 text-cyan-400"
+              />
+              <span>Selecionar todos os lançamentos visíveis</span>
             </div>
 
-            <table className="hidden md:table w-full text-sm">
-              <thead className="bg-slate-950/80 text-slate-400">
-                <tr>
-                  <th className="text-left px-6 py-3">Descrição</th>
-                  <th className="text-left px-4 py-3">Categoria</th>
-                  <th className="text-left px-4 py-3">Pagamento</th>
-                  <th className="text-left px-4 py-3">Responsável</th>
-                  <th className="text-left px-4 py-3">Data</th>
-                  <th className="text-right px-6 py-3">Valor</th>
-                  <th className="px-4 py-3"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {transactions.map(tx => (
-                  <tr key={tx.id} className="border-t border-cyan-500/15 hover:bg-cyan-500/5 transition-colors">
-                    <td className="px-6 py-4 text-white">{tx.description}</td>
-                    <td className="px-4 py-4">
-                      {tx.category ? (
-                        <span className="px-2 py-1 rounded-full text-xs text-white" style={{ backgroundColor: tx.category.color + '40', color: tx.category.color }}>
-                          {tx.category.name}
-                        </span>
-                      ) : <span className="text-slate-600">—</span>}
-                    </td>
-                    <td className="px-4 py-4 text-slate-300 text-xs">
-                      <PaymentMethodChip meta={getPaymentMethodMeta(tx.paymentMethod)} />
-                    </td>
-                    <td className="px-4 py-4 text-slate-400">{tx.user?.name || '—'}</td>
-                    <td className="px-4 py-4 text-slate-400">{formatDate(tx.date)}</td>
-                    <td className={`px-6 py-4 text-right font-semibold ${tx.type === 'INCOME' ? 'text-green-400' : 'text-red-400'}`}>
-                      {tx.type === 'INCOME' ? '+' : '-'}{formatCurrency(tx.amount)}
-                    </td>
-                    <td className="px-4 py-4">
-                      <button onClick={() => setDeleteConfirm({ open: true, txId: tx.id })} className="text-slate-600 hover:text-red-400 transition-colors">
-                        <Trash2 size={16} />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </>
+            {groupedTransactions.invoiceGroups.map((group) => {
+              const isOpen = openGroups[group.monthKey] ?? false
+              return (
+                <div key={group.monthKey} className="rounded-2xl border border-violet-500/20 bg-violet-500/10 overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => toggleGroup(group.monthKey)}
+                    className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left"
+                  >
+                    <div className="flex items-center gap-3">
+                      {isOpen ? <ChevronDown size={18} className="text-violet-200" /> : <ChevronRight size={18} className="text-violet-200" />}
+                      <div>
+                        <p className="text-sm font-semibold text-white">Fatura de {group.label}</p>
+                        <p className="text-xs text-violet-100/75">{group.items.length} lançamento(s) no cartão</p>
+                      </div>
+                    </div>
+                    <p className="text-lg font-black text-violet-100">{formatCurrency(group.total)}</p>
+                  </button>
+
+                  {isOpen && (
+                    <div className="space-y-3 border-t border-violet-500/15 bg-slate-950/35 p-4">
+                      {group.items.map(renderTransactionItem)}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+
+            {groupedTransactions.regularItems.length > 0 && (
+              <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => toggleGroup('regular')}
+                  className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left"
+                >
+                  <div className="flex items-center gap-3">
+                    {(openGroups.regular ?? true) ? <ChevronDown size={18} className="text-cyan-200" /> : <ChevronRight size={18} className="text-cyan-200" />}
+                    <div>
+                      <p className="text-sm font-semibold text-white">Outros lançamentos</p>
+                      <p className="text-xs text-cyan-100/75">Entradas, saídas e itens fora de fatura</p>
+                    </div>
+                  </div>
+                  <p className="text-sm font-semibold text-cyan-100">{groupedTransactions.regularItems.length} item(ns)</p>
+                </button>
+
+                {(openGroups.regular ?? true) && (
+                  <div className="space-y-3 border-t border-cyan-500/15 bg-slate-950/35 p-4">
+                    {groupedTransactions.regularItems.map(renderTransactionItem)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
       {/* Modal de confirmação de delete */}
       <ConfirmModal
         isOpen={deleteConfirm.open}
-        title="Remover Lançamento"
-        message="Tem certeza que deseja remover este lançamento? Esta ação não pode ser desfeita."
+        title={deleteConfirm.txIds.length > 1 ? 'Remover Lancamentos' : 'Remover Lancamento'}
+        message={deleteConfirm.txIds.length > 1 ? `Tem certeza que deseja remover ${deleteConfirm.txIds.length} lancamentos? Esta acao nao pode ser desfeita.` : 'Tem certeza que deseja remover este lancamento? Esta acao nao pode ser desfeita.'}
         confirmText="Remover"
         cancelText="Cancelar"
         isDestructive
         isLoading={deleting}
         onConfirm={handleDeleteConfirm}
-        onCancel={() => setDeleteConfirm({ open: false, txId: null })}
+        onCancel={() => setDeleteConfirm({ open: false, txIds: [] })}
       />
       </div>
     </div>

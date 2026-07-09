@@ -17,15 +17,36 @@ export default function Favicon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'linear-gradient(135deg, #06b6d4 0%, #0ea5e9 100%)',
+          background: 'linear-gradient(145deg, #090f2a 0%, #111827 100%)',
           borderRadius: 6,
-          color: '#0a0a0a',
-          fontSize: 18,
-          fontWeight: 900,
-          letterSpacing: -1
+          border: '1px solid rgba(147, 197, 253, 0.8)',
+          position: 'relative'
         }}
       >
-        MF
+        <div
+          style={{
+            position: 'absolute',
+            width: 14,
+            height: 9,
+            borderRadius: 8,
+            border: '2px solid #5eead4',
+            borderTopColor: '#a5f3fc',
+            borderRightColor: '#2dd4bf',
+            transform: 'rotate(-28deg) translateX(-3px)'
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            width: 14,
+            height: 9,
+            borderRadius: 8,
+            border: '2px solid #93c5fd',
+            borderTopColor: '#f0abfc',
+            borderLeftColor: '#60a5fa',
+            transform: 'rotate(28deg) translateX(3px)'
+          }}
+        />
       </div>
     ),
     size

@@ -32,6 +32,10 @@ function normalizePlanCode(input = '') {
     .replace(/\s+/g, '_')
 }
 
+function normalizeEmail(email = '') {
+  return String(email || '').trim().toLowerCase()
+}
+
 function formatCurrencyBRL(cents) {
   return Number(cents || 0) / 100
 }
@@ -82,10 +86,11 @@ function getSubscriptionStatus(tenant) {
 }
 
 adminRouter.post('/login', async (req, res) => {
-  const { email, password } = req.body
+  const email = normalizeEmail(req.body?.email)
+  const password = String(req.body?.password || '')
 
-  const adminEmail = process.env.ADMIN_EMAIL || 'admin@financeia.local'
-  const adminPassword = process.env.ADMIN_PASSWORD || 'admin123456'
+  const adminEmail = normalizeEmail(process.env.ADMIN_EMAIL || 'admin@financeia.local')
+  const adminPassword = String(process.env.ADMIN_PASSWORD || 'admin123456')
 
   if (email !== adminEmail || password !== adminPassword) {
     return res.status(401).json({ error: 'Credenciais admin invalidas.' })

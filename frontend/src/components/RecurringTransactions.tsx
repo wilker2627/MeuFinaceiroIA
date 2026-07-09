@@ -14,10 +14,9 @@ interface RecurringTransaction {
   nextDate: string
   lastRun?: string
   isActive: boolean
-  category?: { name: string; color: string }
 }
 
-const FREQUENCY_LABELS = {
+const FREQUENCY_LABELS: Record<RecurringTransaction['frequency'], string> = {
   DAILY: 'Diariamente',
   WEEKLY: 'Semanalmente',
   BIWEEKLY: 'Quinzenalmente',
@@ -44,18 +43,74 @@ export default function RecurringTransactions() {
     id: null,
   })
   const [deleting, setDeleting] = useState(false)
+  const [apiMode, setApiMode] = useState<'scheduled' | 'legacy' | 'none'>('scheduled')
 
   useEffect(() => {
     loadRecurring()
   }, [])
 
+  const getErrorMessage = (err: any, fallback: string) => err?.response?.data?.error || fallback
+
+  const normalizeFromScheduled = (data: any[]) => data.map((item: any) => ({
+    id: item.id,
+    description: item.description,
+    amount: Number(item.amount || 0),
+    type: item.type,
+    frequency: 'MONTHLY' as const,
+    nextDate: item.dueDate,
+    lastRun: item.updatedAt,
+    isActive: item.status === 'PENDING'
+  }))
+
+  const normalizeFromRecurring = (data: any[]) => data.map((item: any) => ({
+    id: item.id,
+    description: item.description,
+    amount: Number(item.amount || 0),
+    type: item.type,
+    frequency: (item.frequency || 'MONTHLY') as RecurringTransaction['frequency'],
+    nextDate: item.nextDate || item.dueDate,
+    lastRun: item.lastRun || item.updatedAt,
+    isActive: typeof item.isActive === 'boolean' ? item.isActive : item.status === 'PENDING'
+  }))
+
+  const loadViaScheduled = async () => {
+    const { data } = await api.get('/dashboard/scheduled?recurring=1&status=ALL')
+    return normalizeFromScheduled(Array.isArray(data) ? data : [])
+  }
+
+  const loadViaScheduledAll = async () => {
+    const { data } = await api.get('/dashboard/scheduled?status=ALL')
+    const rows = Array.isArray(data) ? data : []
+    const recurringOnly = rows.filter((item: any) => item?.isRecurring)
+    return normalizeFromScheduled(recurringOnly)
+  }
+
+  const loadViaRecurring = async () => {
+    const { data } = await api.get('/dashboard/recurring')
+    return normalizeFromRecurring(Array.isArray(data) ? data : [])
+  }
+
   const loadRecurring = async () => {
     setLoading(true)
     try {
-      const { data } = await api.get('/dashboard/recurring')
-      setRecurring(data)
-    } catch (err) {
-      addToast('Erro ao carregar lançamentos recorrentes', 'error')
+      try {
+        const normalized = await loadViaScheduled()
+        setApiMode('scheduled')
+        setRecurring(normalized)
+      } catch {
+        try {
+          const normalized = await loadViaScheduledAll()
+          setApiMode('scheduled')
+          setRecurring(normalized)
+        } catch {
+          const normalized = await loadViaRecurring()
+          setApiMode('legacy')
+          setRecurring(normalized)
+        }
+      }
+    } catch (err: any) {
+      setApiMode('none')
+      setRecurring([])
     } finally {
       setLoading(false)
     }
@@ -70,13 +125,30 @@ export default function RecurringTransactions() {
 
     setSaving(true)
     try {
-      await api.post('/dashboard/recurring', form)
+      if (apiMode === 'legacy') {
+        await api.post('/dashboard/recurring', {
+          description: form.description,
+          amount: form.amount,
+          nextDate: form.nextDate,
+          type: form.type,
+          frequency: form.frequency
+        })
+      } else {
+        await api.post('/dashboard/scheduled', {
+          description: form.description,
+          amount: form.amount,
+          dueDate: form.nextDate,
+          type: form.type,
+          isRecurring: true,
+          recurringDay: new Date(form.nextDate).getDate()
+        })
+      }
       addToast('Lançamento recorrente criado!', 'success')
       setShowForm(false)
       setForm({ description: '', amount: '', type: 'EXPENSE', frequency: 'MONTHLY', nextDate: '' })
       loadRecurring()
     } catch (err: any) {
-      addToast(err.response?.data?.error || 'Erro ao criar', 'error')
+      addToast(getErrorMessage(err, 'Erro ao criar lancamento recorrente'), 'error')
     } finally {
       setSaving(false)
     }
@@ -86,12 +158,16 @@ export default function RecurringTransactions() {
     if (!deleteConfirm.id) return
     setDeleting(true)
     try {
-      await api.delete(`/dashboard/recurring/${deleteConfirm.id}`)
+      if (apiMode === 'legacy') {
+        await api.delete(`/dashboard/recurring/${deleteConfirm.id}`)
+      } else {
+        await api.delete(`/dashboard/scheduled/${deleteConfirm.id}`)
+      }
       addToast('Lançamento recorrente removido', 'success')
       setDeleteConfirm({ open: false, id: null })
       loadRecurring()
     } catch (err: any) {
-      addToast(err.response?.data?.error || 'Erro ao remover', 'error')
+      addToast(getErrorMessage(err, 'Erro ao remover lancamento recorrente'), 'error')
     } finally {
       setDeleting(false)
     }
@@ -99,10 +175,14 @@ export default function RecurringTransactions() {
 
   const handleToggleActive = async (id: string, isActive: boolean) => {
     try {
-      await api.patch(`/dashboard/recurring/${id}`, { isActive: !isActive })
+      if (apiMode === 'legacy') {
+        await api.patch(`/dashboard/recurring/${id}`, { isActive: !isActive })
+      } else {
+        await api.patch(`/dashboard/scheduled/${id}`, { isActive: !isActive })
+      }
       loadRecurring()
-    } catch (err) {
-      addToast('Erro ao atualizar', 'error')
+    } catch (err: any) {
+      addToast(getErrorMessage(err, 'Erro ao atualizar lancamento recorrente'), 'error')
     }
   }
 
@@ -153,10 +233,9 @@ export default function RecurringTransactions() {
               value={form.frequency}
               onChange={e => setForm(p => ({ ...p, frequency: e.target.value as any }))}
               className="bg-slate-950 border border-cyan-500/20 text-white rounded px-2 py-1 text-sm"
+              disabled
             >
-              {Object.entries(FREQUENCY_LABELS).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
+              <option value="MONTHLY">Mensalmente</option>
             </select>
           </div>
           <input
@@ -186,7 +265,9 @@ export default function RecurringTransactions() {
       )}
 
       <div className="space-y-2">
-        {recurring.length === 0 ? (
+        {apiMode === 'none' ? (
+          <p className="text-amber-400 text-sm text-center py-4">Recorrentes indisponivel neste backend.</p>
+        ) : recurring.length === 0 ? (
           <p className="text-slate-500 text-sm text-center py-4">Nenhum lançamento recorrente</p>
         ) : (
           recurring.map(tx => (
