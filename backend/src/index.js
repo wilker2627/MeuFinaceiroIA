@@ -64,6 +64,7 @@ app.use(cors({
 app.use(rateLimit({
   windowMs: RATE_LIMIT_WINDOW_MS,
   max: RATE_LIMIT_MAX,
+  skip: (req) => Boolean(req.headers?.authorization),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Muitas requisições, tente novamente em 15 minutos.' }
