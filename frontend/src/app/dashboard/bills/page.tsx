@@ -40,10 +40,6 @@ function monthLabel(monthKey: string) {
   return new Date(year, month - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
 }
 
-function isFutureMonth(monthKey: string, currentMonthKey: string) {
-  return monthKey > currentMonthKey
-}
-
 function startOfMonthKey(monthKey: string) {
   return `${monthKey}-01T00:00:00.000Z`
 }
@@ -76,10 +72,9 @@ export default function BillsPage() {
       })
 
       const responses = await Promise.all(monthKeys.map(async (monthKey) => {
-        const { data } = await api.get(`/dashboard/transactions?month=${monthKey}&type=EXPENSE&paymentMethod=CREDIT_CARD&limit=500&page=1`)
+        const { data } = await api.get(`/dashboard/transactions?month=${monthKey}&monthField=dueDate&type=EXPENSE&paymentMethod=CREDIT_CARD&limit=500&page=1`)
         const items = (data?.transactions || []).filter((tx: BillTransaction) => tx.paymentMethod === 'CREDIT_CARD')
-        const lockedFutureMonth = isFutureMonth(monthKey, currentMonthKey)
-        const unpaidItems = items.filter((tx: BillTransaction) => lockedFutureMonth ? true : !tx.isPaid)
+        const unpaidItems = items.filter((tx: BillTransaction) => !tx.isPaid)
         const total = items.reduce((sum: number, tx: BillTransaction) => sum + Number(tx.amount || 0), 0)
         const unpaidTotal = unpaidItems.reduce((sum: number, tx: BillTransaction) => sum + Number(tx.amount || 0), 0)
         return {
@@ -157,10 +152,6 @@ export default function BillsPage() {
 
   async function handlePayBill() {
     if (!selectedBills) return
-    if (isFutureMonth(selectedBills.monthKey, currentMonthKey)) {
-      addToast('Essa fatura ainda nao pode ser paga antes do mes dela.', 'error')
-      return
-    }
     if (!selectedBills.unpaidTotal || selectedBills.unpaidTotal <= 0) {
       addToast('Nao ha fatura pendente neste mes.', 'error')
       return
@@ -184,11 +175,6 @@ export default function BillsPage() {
   }
 
   async function handlePayBillItem(item: BillTransaction) {
-    if (selectedBillsIsFuture) {
-      addToast('Esse item ainda nao pode ser pago antes do mes dele.', 'error')
-      return
-    }
-
     if (item.isPaid) {
       addToast('Esse item da fatura ja esta pago.', 'error')
       return
@@ -226,7 +212,6 @@ export default function BillsPage() {
   }
 
   const selectedBills = bills.find((bill) => bill.monthKey === selectedMonth) || bills[0]
-  const selectedBillsIsFuture = selectedBills ? isFutureMonth(selectedBills.monthKey, currentMonthKey) : false
 
   return (
     <div className="relative p-4 md:p-6 space-y-6">
@@ -332,14 +317,14 @@ export default function BillsPage() {
                   <button
                     type="button"
                     onClick={handlePayBill}
-                    disabled={paying || !selectedBills.unpaidTotal || selectedBillsIsFuture}
+                    disabled={paying || !selectedBills.unpaidTotal}
                     className="inline-flex items-center gap-2 rounded-xl bg-emerald-400 px-4 py-2.5 text-sm font-semibold text-slate-950 disabled:opacity-60"
                   >
                     {paying && <Loader size={15} className="animate-spin" />}
                     Pagar fatura
                   </button>
                 </div>
-                <p className="text-xs text-slate-400">Ao pagar, os itens deste mês ficam marcados como pagos e o valor é abatido da conta escolhida. Meses futuros permanecem pendentes até chegarem.</p>
+                <p className="text-xs text-slate-400">Tudo fica pendente por padrão. Use este botão apenas se quiser pagar/antecipar os itens deste mês de fatura.</p>
               </div>
 
               <div className="space-y-2">
@@ -355,7 +340,7 @@ export default function BillsPage() {
                       </div>
                       <div className="text-right">
                         <p className={`font-semibold ${item.isPaid ? 'text-emerald-300' : 'text-violet-200'}`}>{formatCurrency(Number(item.amount || 0))}</p>
-                        <p className={`text-[11px] ${item.isPaid && !selectedBillsIsFuture ? 'text-emerald-200/70' : 'text-slate-500'}`}>{item.isPaid && !selectedBillsIsFuture ? 'Pago' : 'Pendente'}</p>
+                        <p className={`text-[11px] ${item.isPaid ? 'text-emerald-200/70' : 'text-slate-500'}`}>{item.isPaid ? 'Pago' : 'Pendente'}</p>
                       </div>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -386,14 +371,20 @@ export default function BillsPage() {
                       >
                         Excluir
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handlePayBillItem(item)}
-                        disabled={paying || selectedBillsIsFuture || !!item.isPaid}
-                        className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-60"
-                      >
-                        Pagar
-                      </button>
+                      {item.isPaid ? (
+                        <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-200">
+                          Pago
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => handlePayBillItem(item)}
+                          disabled={paying}
+                          className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-60"
+                        >
+                          Pagar / Antecipar
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))}

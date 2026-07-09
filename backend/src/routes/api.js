@@ -123,7 +123,7 @@ apiRouter.get('/evolution', async (req, res) => {
 // ===========================
 // GET /api/dashboard/transactions
 apiRouter.get('/transactions', async (req, res) => {
-  const { page = 1, limit = 50, type, month, search, paymentMethod } = req.query
+  const { page = 1, limit = 50, type, month, search, paymentMethod, monthField } = req.query
   const skip = (parseInt(page) - 1) * parseInt(limit)
 
   const where = { tenantId: req.tenant.id }
@@ -132,10 +132,16 @@ apiRouter.get('/transactions', async (req, res) => {
   if (month) {
     const date = parseISO(`${month}-01`)
     const range = { gte: startOfMonth(date), lte: endOfMonth(date) }
-    where.OR = [
-      { date: range },
-      { dueDate: range }
-    ]
+    if (monthField === 'dueDate') {
+      where.dueDate = range
+    } else if (monthField === 'date') {
+      where.date = range
+    } else {
+      where.OR = [
+        { date: range },
+        { dueDate: range }
+      ]
+    }
   }
   if (search) {
     where.description = { contains: search, mode: 'insensitive' }
@@ -407,12 +413,6 @@ apiRouter.post('/bills/pay', async (req, res) => {
   const date = parseISO(`${month}-01`)
   const monthStart = startOfMonth(date)
   const monthEnd = endOfMonth(date)
-  const now = new Date()
-  const currentMonthStart = startOfMonth(now)
-
-  if (monthStart > currentMonthStart) {
-    return res.status(400).json({ error: 'Esta fatura ainda nao pode ser paga antes do mes dela.' })
-  }
 
   const unpaidBills = await prisma.transaction.findMany({
     where: {
@@ -420,10 +420,7 @@ apiRouter.post('/bills/pay', async (req, res) => {
       type: 'EXPENSE',
       paymentMethod: 'CREDIT_CARD',
       isPaid: false,
-      OR: [
-        { date: { gte: monthStart, lte: monthEnd } },
-        { dueDate: { gte: monthStart, lte: monthEnd } }
-      ]
+      dueDate: { gte: monthStart, lte: monthEnd }
     }
   })
 
@@ -488,14 +485,6 @@ apiRouter.post('/bills/pay-item', async (req, res) => {
 
   if (tx.isPaid) {
     return res.status(400).json({ error: 'Este item da fatura ja esta pago.' })
-  }
-
-  const referenceDate = tx.dueDate || tx.date
-  const dueMonthStart = startOfMonth(referenceDate)
-  const currentMonthStart = startOfMonth(new Date())
-
-  if (dueMonthStart > currentMonthStart) {
-    return res.status(400).json({ error: 'Este item ainda nao pode ser pago antes do mes dele.' })
   }
 
   const account = await prisma.account.findFirst({
