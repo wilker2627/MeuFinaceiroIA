@@ -18,6 +18,12 @@ import { logger } from './config/logger.js'
 const app = express()
 const PORT = process.env.PORT || 3001
 const WA_ENABLED = String(process.env.WA_ENABLED || 'true').trim().toLowerCase() === 'true'
+const RATE_LIMIT_WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000)
+const RATE_LIMIT_MAX = Number(process.env.RATE_LIMIT_MAX || 1200)
+
+// Render and similar platforms run behind reverse proxies.
+// Trusting the first proxy preserves the real client IP for rate limiting.
+app.set('trust proxy', 1)
 
 function isLocalLanOrigin(origin = '') {
   return /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$/i.test(origin)
@@ -56,8 +62,8 @@ app.use(cors({
   credentials: true
 }))
 app.use(rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
-  max: 200,
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  max: RATE_LIMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Muitas requisições, tente novamente em 15 minutos.' }
