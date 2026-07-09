@@ -48,7 +48,7 @@ function SubscribeSuccessContent() {
     <div className="min-h-screen bg-gray-950 flex items-center justify-center px-4">
       <div className="w-full max-w-lg rounded-2xl border border-gray-800 bg-gray-900 p-6 text-gray-100">
         <div className="flex justify-center mb-4">
-            <Image src="/financeiroai-logo.svg?v=20260708r3" alt="FinanceiroAI" width={84} height={84} className="rounded-[1.4rem] shadow-[0_14px_36px_rgba(34,211,238,0.28)]" />
+            <Image src="/financeiroai-logo.svg?v=20260709r1" alt="FinanceiroAI" width={84} height={84} className="rounded-[1.4rem] shadow-[0_14px_36px_rgba(34,211,238,0.28)]" />
         </div>
         <p className="text-center text-2xl font-black tracking-tight text-cyan-300 mb-1">FinanceiroAI</p>
         <h1 className="text-2xl font-bold text-emerald-300">Pagamento aprovado</h1>

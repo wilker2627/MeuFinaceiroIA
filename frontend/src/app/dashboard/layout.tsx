@@ -85,7 +85,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <aside className="hidden md:flex md:w-72 md:flex-col m-4 mr-0 rounded-3xl border border-cyan-500/20 bg-slate-900/80 backdrop-blur-xl shadow-[0_18px_55px_rgba(2,8,23,0.45)]">
         <div className="p-6 border-b border-cyan-500/15">
           <div className="flex items-center gap-4">
-            <Image src="/financeiroai-logo.svg?v=20260708r3" alt="FinanceiroAI" width={52} height={52} className="rounded-2xl shadow-[0_8px_24px_rgba(34,211,238,0.2)]" />
+            <Image src="/financeiroai-logo.svg?v=20260709r1" alt="FinanceiroAI" width={52} height={52} className="rounded-2xl shadow-[0_8px_24px_rgba(34,211,238,0.2)]" />
             <div>
               <div className="text-lg font-black text-cyan-300 leading-tight">FinanceiroAI</div>
               <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Neuro Finance Bot</p>
@@ -140,7 +140,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             >
               <div className="p-6 border-b border-cyan-500/15">
                 <div className="flex items-center gap-3">
-                  <Image src="/financeiroai-logo.svg?v=20260708r3" alt="FinanceiroAI" width={42} height={42} className="rounded-xl shadow-[0_6px_18px_rgba(34,211,238,0.18)]" />
+                  <Image src="/financeiroai-logo.svg?v=20260709r1" alt="FinanceiroAI" width={42} height={42} className="rounded-xl shadow-[0_6px_18px_rgba(34,211,238,0.18)]" />
                   <div>
                     <div className="text-base font-black text-cyan-300">FinanceiroAI</div>
                     <p className="text-[10px] uppercase tracking-[0.22em] text-slate-500">Neuro Finance Bot</p>

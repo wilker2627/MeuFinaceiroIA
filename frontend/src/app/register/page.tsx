@@ -51,7 +51,7 @@ export default function RegisterPage() {
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center p-2.5 bg-gradient-to-br from-cyan-500/16 to-emerald-500/14 border border-cyan-500/30 rounded-3xl mb-4 shadow-[0_16px_38px_rgba(34,211,238,0.22)]">
             <Image
-              src="/financeiroai-logo.svg?v=20260708r3"
+              src="/financeiroai-logo.svg?v=20260709r1"
               alt="FinanceiroAI"
               width={84}
               height={84}

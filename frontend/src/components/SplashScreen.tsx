@@ -30,7 +30,7 @@ export default function SplashScreen() {
         <div className="relative w-40 h-40 flex items-center justify-center">
           <div className="absolute inset-0 bg-cyan-600 rounded-3xl opacity-20 border-2 border-cyan-500" />
           <div className="relative w-28 h-28 rounded-2xl flex items-center justify-center shadow-2xl">
-            <Image src="/financeiroai-logo.svg?v=20260708r3" alt="FinanceiroAI" width={112} height={112} priority className="rounded-2xl" />
+            <Image src="/financeiroai-logo.svg?v=20260709r1" alt="FinanceiroAI" width={112} height={112} priority className="rounded-2xl" />
           </div>
         </div>
 

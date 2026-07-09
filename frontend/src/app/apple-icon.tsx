@@ -19,7 +19,7 @@ export default function AppleIcon() {
           alignItems: 'center',
           justifyContent: 'center',
           gap: 4,
-          background: 'linear-gradient(160deg, #050813 0%, #090f2a 55%, #111827 100%)',
+          background: 'linear-gradient(160deg, #101b34 0%, #070f22 58%, #030712 100%)',
           fontFamily: 'system-ui, -apple-system, sans-serif',
           padding: 8
         }}
@@ -31,39 +31,18 @@ export default function AppleIcon() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'radial-gradient(circle at 30% 20%, rgba(129,140,248,0.35), rgba(3,7,18,0.9) 58%)',
+            background: 'radial-gradient(circle at 30% 20%, rgba(196,181,253,0.35), rgba(3,7,18,0.9) 58%)',
             borderRadius: 35,
-            border: '2px solid rgba(147, 197, 253, 0.8)',
-            boxShadow: '0 0 20px rgba(147, 197, 253, 0.4)',
-            position: 'relative'
+            border: '2px solid rgba(125, 211, 252, 0.85)',
+            boxShadow: '0 0 20px rgba(125, 211, 252, 0.35)',
+            color: '#FACC15',
+            fontSize: 110,
+            fontWeight: 900,
+            lineHeight: 1,
+            textShadow: '0 8px 18px rgba(250, 204, 21, 0.42), 0 0 5px rgba(255, 247, 208, 0.85)'
           }}
         >
-          <div
-            style={{
-              position: 'absolute',
-              width: 74,
-              height: 52,
-              borderRadius: 40,
-              border: '9px solid #5eead4',
-              borderTopColor: '#a5f3fc',
-              borderRightColor: '#2dd4bf',
-              transform: 'rotate(-28deg) translateX(-14px)',
-              boxShadow: '0 0 12px rgba(45,212,191,0.35)'
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              width: 74,
-              height: 52,
-              borderRadius: 40,
-              border: '9px solid #93c5fd',
-              borderTopColor: '#f0abfc',
-              borderLeftColor: '#60a5fa',
-              transform: 'rotate(28deg) translateX(14px)',
-              boxShadow: '0 0 12px rgba(147,197,253,0.35)'
-            }}
-          />
+          $
         </div>
       </div>
     ),

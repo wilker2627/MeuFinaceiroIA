@@ -17,7 +17,7 @@ export default function Icon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'linear-gradient(160deg, #020617 0%, #040b24 55%, #0b1027 100%)',
+          background: 'linear-gradient(160deg, #101b34 0%, #070f22 58%, #030712 100%)',
           fontFamily: 'system-ui, -apple-system, sans-serif'
         }}
       >
@@ -26,50 +26,29 @@ export default function Icon() {
             width: 360,
             height: 360,
             borderRadius: 88,
-            border: '8px solid rgba(147, 197, 253, 0.85)',
+            border: '8px solid rgba(125, 211, 252, 0.85)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'radial-gradient(circle at 25% 20%, rgba(99,102,241,0.35), rgba(2,6,23,0.9) 58%)',
-            boxShadow: '0 0 48px rgba(99, 102, 241, 0.32)'
+            background: 'radial-gradient(circle at 28% 18%, rgba(196,181,253,0.35), rgba(7,12,24,0.92) 58%)',
+            boxShadow: '0 0 48px rgba(125, 211, 252, 0.32)'
           }}
         >
           <div
             style={{
-              width: 250,
-              height: 170,
+              width: 230,
+              height: 230,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              position: 'relative'
+              color: '#FACC15',
+              fontSize: 210,
+              fontWeight: 900,
+              lineHeight: 1,
+              textShadow: '0 10px 28px rgba(250, 204, 21, 0.4), 0 0 6px rgba(255, 247, 208, 0.8)'
             }}
           >
-            <div
-              style={{
-                position: 'absolute',
-                width: 145,
-                height: 98,
-                borderRadius: 72,
-                border: '16px solid #5eead4',
-                borderTopColor: '#a5f3fc',
-                borderRightColor: '#2dd4bf',
-                transform: 'rotate(-28deg) translateX(-26px)',
-                boxShadow: '0 0 20px rgba(45,212,191,0.4)'
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                width: 145,
-                height: 98,
-                borderRadius: 72,
-                border: '16px solid #93c5fd',
-                borderTopColor: '#f0abfc',
-                borderLeftColor: '#60a5fa',
-                transform: 'rotate(28deg) translateX(26px)',
-                boxShadow: '0 0 20px rgba(147,197,253,0.35)'
-              }}
-            />
+            $
           </div>
         </div>
       </div>

@@ -34,7 +34,7 @@ export default function AdminLoginPage() {
       <form onSubmit={onSubmit} className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8">
         <div className="mb-4 flex items-center gap-3">
           <div className="inline-flex items-center justify-center rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-1.5">
-            <Image src="/financeiroai-logo.svg?v=20260708r3" alt="FinanceiroAI" width={44} height={44} className="rounded-xl" />
+            <Image src="/financeiroai-logo.svg?v=20260709r1" alt="FinanceiroAI" width={44} height={44} className="rounded-xl" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-cyan-300">FinanceiroAI Admin</h1>
