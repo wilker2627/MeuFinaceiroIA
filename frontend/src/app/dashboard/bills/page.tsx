@@ -197,6 +197,28 @@ export default function BillsPage() {
     }
   }
 
+  async function handleUnpayBillItem(item: BillTransaction) {
+    if (!item.isPaid) {
+      addToast('Esse item da fatura ja esta pendente.', 'error')
+      return
+    }
+
+    setPaying(true)
+    try {
+      const { data } = await api.post('/dashboard/bills/unpay-item', {
+        transactionId: item.id,
+      })
+
+      addToast(`${data?.message || 'Item da fatura marcado como pendente com sucesso.'} Total: ${formatCurrency(Number(data?.total || item.amount || 0))}`, 'success')
+      await loadBills()
+      triggerDashboardRefresh()
+    } catch (error: any) {
+      addToast(error?.response?.data?.error || 'Nao foi possivel marcar este item como pendente.', 'error')
+    } finally {
+      setPaying(false)
+    }
+  }
+
   async function handleDeleteBillItem(item: BillTransaction) {
     const confirmed = window.confirm('Tem certeza que deseja excluir este item da fatura?')
     if (!confirmed) return
@@ -372,9 +394,14 @@ export default function BillsPage() {
                         Excluir
                       </button>
                       {item.isPaid ? (
-                        <span className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-200">
-                          Pago
-                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleUnpayBillItem(item)}
+                          disabled={paying}
+                          className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-200 hover:bg-amber-500/20 disabled:opacity-60"
+                        >
+                          Marcar pendente
+                        </button>
                       ) : (
                         <button
                           type="button"

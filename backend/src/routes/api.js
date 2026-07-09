@@ -438,6 +438,12 @@ apiRouter.post('/bills/pay', async (req, res) => {
     return res.status(404).json({ error: 'Nenhuma conta foi encontrada para pagar a fatura.' })
   }
 
+  if (Number(account.balance || 0) < total) {
+    return res.status(400).json({
+      error: `Saldo insuficiente na conta ${account.name}. Disponivel: ${Number(account.balance || 0).toFixed(2)} | Necessario: ${total.toFixed(2)}`
+    })
+  }
+
   await prisma.$transaction([
     prisma.transaction.updateMany({
       where: { id: { in: unpaidBills.map((tx) => tx.id) } },
@@ -496,6 +502,13 @@ apiRouter.post('/bills/pay-item', async (req, res) => {
     return res.status(404).json({ error: 'Nenhuma conta foi encontrada para pagar este item.' })
   }
 
+  const itemAmount = Number(tx.amount || 0)
+  if (Number(account.balance || 0) < itemAmount) {
+    return res.status(400).json({
+      error: `Saldo insuficiente na conta ${account.name}. Disponivel: ${Number(account.balance || 0).toFixed(2)} | Necessario: ${itemAmount.toFixed(2)}`
+    })
+  }
+
   await prisma.$transaction([
     prisma.transaction.update({
       where: { id: tx.id },
@@ -506,7 +519,7 @@ apiRouter.post('/bills/pay-item', async (req, res) => {
     }),
     prisma.account.update({
       where: { id: account.id },
-      data: { balance: { increment: -Number(tx.amount || 0) } }
+      data: { balance: { increment: -itemAmount } }
     })
   ])
 
@@ -515,6 +528,56 @@ apiRouter.post('/bills/pay-item', async (req, res) => {
     transactionId: tx.id,
     total: Number(tx.amount || 0),
     account: { id: account.id, name: account.name }
+  })
+})
+
+// POST /api/dashboard/bills/unpay-item
+apiRouter.post('/bills/unpay-item', async (req, res) => {
+  const { transactionId } = req.body
+
+  if (!transactionId) {
+    return res.status(400).json({ error: 'Informe o item da fatura.' })
+  }
+
+  const tx = await prisma.transaction.findFirst({
+    where: {
+      id: transactionId,
+      tenantId: req.tenant.id,
+      type: 'EXPENSE',
+      paymentMethod: 'CREDIT_CARD'
+    }
+  })
+
+  if (!tx) {
+    return res.status(404).json({ error: 'Item da fatura nao encontrado.' })
+  }
+
+  if (!tx.isPaid) {
+    return res.status(400).json({ error: 'Este item da fatura ja esta pendente.' })
+  }
+
+  await prisma.$transaction([
+    prisma.transaction.update({
+      where: { id: tx.id },
+      data: {
+        isPaid: false,
+        accountId: null
+      }
+    }),
+    ...(tx.accountId
+      ? [
+          prisma.account.update({
+            where: { id: tx.accountId },
+            data: { balance: { increment: Number(tx.amount || 0) } }
+          })
+        ]
+      : [])
+  ])
+
+  return res.json({
+    message: 'Item da fatura marcado como pendente com sucesso.',
+    transactionId: tx.id,
+    total: Number(tx.amount || 0)
   })
 })
 
