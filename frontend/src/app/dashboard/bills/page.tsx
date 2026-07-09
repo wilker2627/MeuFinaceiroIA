@@ -205,11 +205,11 @@ export default function BillsPage() {
 
     setPaying(true)
     try {
-      const { data } = await api.post('/dashboard/bills/unpay-item', {
-        transactionId: item.id,
+      await api.patch(`/dashboard/transactions/${item.id}`, {
+        isPaid: false,
       })
 
-      addToast(`${data?.message || 'Item da fatura marcado como pendente com sucesso.'} Total: ${formatCurrency(Number(data?.total || item.amount || 0))}`, 'success')
+      addToast(`Item da fatura marcado como pendente com sucesso. Total: ${formatCurrency(Number(item.amount || 0))}`, 'success')
       await loadBills()
       triggerDashboardRefresh()
     } catch (error: any) {

@@ -365,13 +365,85 @@ apiRouter.patch('/transactions/:id', async (req, res) => {
     return res.status(404).json({ error: 'Transação não encontrada.' })
   }
 
-  const { description, amount, dueDate, isPaid } = req.body
+  const { description, amount, dueDate, isPaid, accountId } = req.body
   const data = {}
 
   if (description !== undefined) data.description = String(description)
   if (amount !== undefined) data.amount = Number(amount)
   if (dueDate !== undefined) data.dueDate = dueDate ? new Date(dueDate) : null
   if (typeof isPaid === 'boolean') data.isPaid = isPaid
+  if (accountId !== undefined) data.accountId = accountId || null
+
+  const isCreditCardExpense = tx.type === 'EXPENSE' && tx.paymentMethod === 'CREDIT_CARD'
+  const isPaidToggle = typeof isPaid === 'boolean' && isPaid !== Boolean(tx.isPaid)
+
+  if (isCreditCardExpense && isPaidToggle) {
+    const txAmount = Number(tx.amount || 0)
+
+    if (isPaid === true) {
+      const targetAccount = await prisma.account.findFirst({
+        where: accountId
+          ? { id: accountId, tenantId: req.tenant.id }
+          : tx.accountId
+            ? { id: tx.accountId, tenantId: req.tenant.id }
+            : { tenantId: req.tenant.id },
+        orderBy: { createdAt: 'asc' }
+      })
+
+      if (!targetAccount) {
+        return res.status(404).json({ error: 'Nenhuma conta foi encontrada para atualizar este pagamento.' })
+      }
+
+      if (Number(targetAccount.balance || 0) < txAmount) {
+        return res.status(400).json({
+          error: `Saldo insuficiente na conta ${targetAccount.name}. Disponivel: ${Number(targetAccount.balance || 0).toFixed(2)} | Necessario: ${txAmount.toFixed(2)}`
+        })
+      }
+
+      const [updated] = await prisma.$transaction([
+        prisma.transaction.update({
+          where: { id: tx.id },
+          data: {
+            ...data,
+            isPaid: true,
+            accountId: targetAccount.id
+          },
+          include: { category: true, account: true, from: true, to: true, user: true }
+        }),
+        prisma.account.update({
+          where: { id: targetAccount.id },
+          data: { balance: { increment: -txAmount } }
+        })
+      ])
+
+      return res.json(updated)
+    }
+
+    const accountToRefundId = tx.accountId
+    const operations = [
+      prisma.transaction.update({
+        where: { id: tx.id },
+        data: {
+          ...data,
+          isPaid: false,
+          accountId: null
+        },
+        include: { category: true, account: true, from: true, to: true, user: true }
+      })
+    ]
+
+    if (accountToRefundId) {
+      operations.push(
+        prisma.account.update({
+          where: { id: accountToRefundId },
+          data: { balance: { increment: txAmount } }
+        })
+      )
+    }
+
+    const [updated] = await prisma.$transaction(operations)
+    return res.json(updated)
+  }
 
   const updated = await prisma.transaction.update({
     where: { id: tx.id },
