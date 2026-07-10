@@ -256,6 +256,60 @@ export default function DashboardPage() {
 
     try {
       try {
+        const { data: bootstrapData } = await api.get('/dashboard/bootstrap?months=6')
+
+        if (bootstrapData?.summary) {
+          setSummary(bootstrapData.summary)
+          setTotalBalanceInput(String(Number(bootstrapData?.summary?.balance?.total || 0).toFixed(2)).replace('.', ','))
+          setEvolution(Array.isArray(bootstrapData?.evolution) ? bootstrapData.evolution : [])
+          setCategories(Array.isArray(bootstrapData?.categories) ? bootstrapData.categories : [])
+          setTeamReport(bootstrapData?.teamReport || null)
+          setGoals(Array.isArray(bootstrapData?.goals) ? bootstrapData.goals : [])
+          setSettings(bootstrapData?.settings || null)
+
+          const monthKey = String(bootstrapData?.nextMonthCardBill?.monthKey || '')
+          setNextMonthCardBill({
+            month: monthKey ? formatMonthKeyToPtBr(monthKey) : '',
+            total: Number(bootstrapData?.nextMonthCardBill?.total || 0),
+            items: Array.isArray(bootstrapData?.nextMonthCardBill?.items) ? bootstrapData.nextMonthCardBill.items : []
+          })
+
+          const bootstrapRecentEntries = Array.isArray(bootstrapData?.recentEntries)
+            ? bootstrapData.recentEntries
+            : (Array.isArray(bootstrapData?.summary?.family?.recentEntries) ? bootstrapData.summary.family.recentEntries : [])
+
+          setRecentEntries(bootstrapRecentEntries.map((tx: any) => ({
+            id: tx.id,
+            description: cleanDescription(tx.description),
+            amount: Number(tx.amount || 0),
+            category: tx.category?.name || tx.category || 'Outros',
+            paymentMethod: tx.paymentMethod || 'CASH',
+          })))
+
+          const bootstrapRecentExpenses = Array.isArray(bootstrapData?.recentExpenses)
+            ? bootstrapData.recentExpenses
+            : (Array.isArray(bootstrapData?.summary?.family?.recentExpenses) ? bootstrapData.summary.family.recentExpenses : [])
+
+          setRecentExpenses(bootstrapRecentExpenses.map((tx: any) => ({
+            id: tx.id,
+            description: cleanDescription(tx.description),
+            amount: Number(tx.amount || 0),
+            category: tx.category?.name || tx.category || 'Outros',
+            paymentMethod: tx.paymentMethod || 'CASH',
+          })))
+
+          if (force || Date.now() - diagnosticsLastLoadAtRef.current > 60000) {
+            await loadDiagnostics()
+            diagnosticsLastLoadAtRef.current = Date.now()
+          }
+
+          return
+        }
+      } catch {
+        // Fallback para fluxo legado durante rollout de backend
+      }
+
+      try {
         const { data } = await api.get('/dashboard/summary')
         setSummary(data)
         setTotalBalanceInput(String(Number(data?.balance?.total || 0).toFixed(2)).replace('.', ','))

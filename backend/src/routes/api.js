@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { randomUUID } from 'crypto'
 import { prisma } from '../config/database.js'
-import { getFinancialSummary, getCashFlow, getExpensesByCategory, getMonthlyEvolution } from '../services/reportService.js'
+import { getFinancialSummary, getCashFlow, getExpensesByCategory, getMonthlyEvolution, getTeamReport } from '../services/reportService.js'
 import { triggerDailyDigestNow, triggerWeeklyDigestNow } from '../services/reminderService.js'
 import { getWhatsAppRuntimeHealth, getRepairAuditEntries, getTenantRepairLimitStatus } from '../services/whatsappManager.js'
 import { startOfMonth, endOfMonth, parseISO, startOfDay, endOfDay, addMonths } from 'date-fns'
@@ -85,6 +85,58 @@ apiRouter.get('/system/health', async (req, res) => {
 apiRouter.get('/summary', async (req, res) => {
   const summary = await getFinancialSummary(req.tenant.id)
   res.json(summary)
+})
+
+// GET /api/dashboard/bootstrap?months=6
+apiRouter.get('/bootstrap', async (req, res) => {
+  const months = Math.min(Math.max(parseInt(req.query.months) || 6, 1), 24)
+  const now = new Date()
+  const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+  const nextMonthKey = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`
+  const nextMonthStart = startOfMonth(nextMonthDate)
+  const nextMonthEnd = endOfMonth(nextMonthDate)
+
+  const [summary, evolution, categories, teamReport, goals, settings, nextMonthTransactions] = await Promise.all([
+    getFinancialSummary(req.tenant.id),
+    getMonthlyEvolution(req.tenant.id, months),
+    getExpensesByCategory(req.tenant.id, startOfMonth(now), endOfMonth(now)),
+    getTeamReport(req.tenant.id),
+    prisma.goal.findMany({ where: { tenantId: req.tenant.id }, orderBy: { createdAt: 'asc' } }),
+    prisma.tenantNotificationSettings.upsert({
+      where: { tenantId: req.tenant.id },
+      update: {},
+      create: { tenantId: req.tenant.id }
+    }),
+    prisma.transaction.findMany({
+      where: {
+        tenantId: req.tenant.id,
+        type: 'EXPENSE',
+        paymentMethod: 'CREDIT_CARD',
+        dueDate: { gte: nextMonthStart, lte: nextMonthEnd }
+      },
+      include: { category: true, account: true, from: true, to: true, user: true },
+      orderBy: { dueDate: 'asc' },
+      take: 300
+    })
+  ])
+
+  const nextMonthTotal = nextMonthTransactions.reduce((sum, tx) => sum + Number(tx.amount || 0), 0)
+
+  res.json({
+    summary,
+    evolution,
+    categories,
+    teamReport,
+    goals,
+    settings,
+    nextMonthCardBill: {
+      monthKey: nextMonthKey,
+      total: nextMonthTotal,
+      items: nextMonthTransactions.slice(0, 6)
+    },
+    recentEntries: summary?.family?.recentEntries || [],
+    recentExpenses: summary?.family?.recentExpenses || []
+  })
 })
 
 // GET /api/dashboard/cashflow?month=2024-01
