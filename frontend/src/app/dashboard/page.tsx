@@ -1198,6 +1198,27 @@ export default function DashboardPage() {
     return Math.round(sorted[idx])
   })()
 
+  const loadTrend = (() => {
+    if (recentClientTimes.length < 4) return null
+
+    const latestSlice = recentClientTimes.slice(-5)
+    const previousSlice = recentClientTimes.slice(-10, -5)
+    if (latestSlice.length === 0 || previousSlice.length === 0) return null
+
+    const latestAvg = latestSlice.reduce((sum, value) => sum + value, 0) / latestSlice.length
+    const previousAvg = previousSlice.reduce((sum, value) => sum + value, 0) / previousSlice.length
+    const deltaMs = Math.round(latestAvg - previousAvg)
+
+    if (Math.abs(deltaMs) < 8) {
+      return { direction: 'stable' as const, deltaMs: 0 }
+    }
+
+    return {
+      direction: deltaMs < 0 ? ('improved' as const) : ('worse' as const),
+      deltaMs: Math.abs(deltaMs)
+    }
+  })()
+
   // Componente de Card de Estatística Premium
   const PremiumStatCard = ({ label, value, icon: Icon, color, trend, note }: any) => {
     const colorClasses = {
@@ -1251,6 +1272,11 @@ export default function DashboardPage() {
               {loadHistory.length > 0 && (
                 <p className="mt-1 text-[11px] text-slate-500">
                   Ultimos {loadHistory.length}: media {averageClientMs ?? '-'}ms • p95 {p95ClientMs ?? '-'}ms
+                </p>
+              )}
+              {loadTrend && (
+                <p className={`mt-1 text-[11px] ${loadTrend.direction === 'improved' ? 'text-emerald-300' : loadTrend.direction === 'worse' ? 'text-rose-300' : 'text-slate-500'}`}>
+                  Tendencia: {loadTrend.direction === 'improved' ? `↑ melhorou ${loadTrend.deltaMs}ms` : loadTrend.direction === 'worse' ? `↓ piorou ${loadTrend.deltaMs}ms` : '→ estavel'}
                 </p>
               )}
 
