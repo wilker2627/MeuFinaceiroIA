@@ -148,6 +148,8 @@ type LoadMetricSample = {
   at: number
 }
 
+const DASHBOARD_LOAD_HISTORY_STORAGE_KEY = 'dashboard-load-history-v1'
+
 const PERSON_TAG_REGEX = /\|\s*Pessoa:\s*(.+)$/i
 
 function extractPersonFromDescription(description?: string) {
@@ -454,6 +456,50 @@ export default function DashboardPage() {
   useEffect(() => {
     loadDashboardData(true)
   }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    try {
+      const raw = window.localStorage.getItem(DASHBOARD_LOAD_HISTORY_STORAGE_KEY)
+      if (!raw) return
+
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return
+
+      const normalized = parsed
+        .filter((item) => item && (item.source === 'bootstrap' || item.source === 'legacy'))
+        .map((item) => ({
+          source: item.source,
+          serverMs: Number.isFinite(Number(item.serverMs)) ? Number(item.serverMs) : null,
+          clientMs: Number.isFinite(Number(item.clientMs)) ? Number(item.clientMs) : null,
+          at: Number.isFinite(Number(item.at)) ? Number(item.at) : Date.now()
+        }))
+        .slice(-10)
+
+      if (normalized.length > 0) {
+        setLoadHistory(normalized)
+        const last = normalized[normalized.length - 1]
+        setLoadMetrics({
+          source: last.source,
+          serverMs: last.serverMs,
+          clientMs: last.clientMs
+        })
+      }
+    } catch {
+      // Ignore localStorage corruption and continue with fresh metrics.
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    try {
+      window.localStorage.setItem(DASHBOARD_LOAD_HISTORY_STORAGE_KEY, JSON.stringify(loadHistory.slice(-10)))
+    } catch {
+      // Ignore storage quota/private mode issues.
+    }
+  }, [loadHistory])
 
   useEffect(() => {
     return subscribeDashboardRefresh(() => {
