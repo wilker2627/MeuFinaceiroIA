@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import api from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
@@ -227,6 +227,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [nextMonthCardBill, setNextMonthCardBill] = useState<{ month: string; total: number; items: any[] }>({ month: '', total: 0, items: [] })
+  const dashboardLoadInFlightRef = useRef(false)
+  const dashboardLastLoadAtRef = useRef(0)
+  const diagnosticsLastLoadAtRef = useRef(0)
 
   function parseCurrencyInput(value: string) {
     const cleaned = String(value || '').replace(/\s/g, '').replace(/R\$/gi, '')
@@ -241,102 +244,114 @@ export default function DashboardPage() {
     return Number(cleaned)
   }
 
-  async function loadDashboardData() {
+  async function loadDashboardData(force = false) {
+    const nowTs = Date.now()
+    if (!force && dashboardLoadInFlightRef.current) return
+    if (!force && nowTs - dashboardLastLoadAtRef.current < 900) return
+
+    dashboardLoadInFlightRef.current = true
+    dashboardLastLoadAtRef.current = nowTs
     setLoading(true)
     setLoadError('')
 
     try {
-      const { data } = await api.get('/dashboard/summary')
-      setSummary(data)
-      setTotalBalanceInput(String(Number(data?.balance?.total || 0).toFixed(2)).replace('.', ','))
-    } catch (error: any) {
-      setSummary(null)
-      setLoadError(error?.response?.data?.error || 'Nao foi possivel carregar os dados principais do dashboard.')
-      setLoading(false)
-      return
-    }
+      try {
+        const { data } = await api.get('/dashboard/summary')
+        setSummary(data)
+        setTotalBalanceInput(String(Number(data?.balance?.total || 0).toFixed(2)).replace('.', ','))
+      } catch (error: any) {
+        setSummary(null)
+        setLoadError(error?.response?.data?.error || 'Nao foi possivel carregar os dados principais do dashboard.')
+        return
+      }
 
-    const now = new Date()
-    const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
-    const nextMonthKey = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`
+      const now = new Date()
+      const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+      const nextMonthKey = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth() + 1).padStart(2, '0')}`
 
-    const [evolutionRes, categoriesRes, teamRes, goalsRes, settingsRes, nextMonthCardBillRes] = await Promise.allSettled([
-      api.get('/dashboard/evolution?months=6'),
-      api.get('/dashboard/categories'),
-      api.get('/users/team-report'),
-      api.get('/dashboard/goals'),
-      api.get('/dashboard/notification-settings'),
-      api.get(`/dashboard/transactions?month=${nextMonthKey}&type=EXPENSE&paymentMethod=CREDIT_CARD&limit=300&page=1`),
-    ])
+      const [evolutionRes, categoriesRes, teamRes, goalsRes, settingsRes, nextMonthCardBillRes] = await Promise.allSettled([
+        api.get('/dashboard/evolution?months=6'),
+        api.get('/dashboard/categories'),
+        api.get('/users/team-report'),
+        api.get('/dashboard/goals'),
+        api.get('/dashboard/notification-settings'),
+        api.get(`/dashboard/transactions?month=${nextMonthKey}&type=EXPENSE&paymentMethod=CREDIT_CARD&limit=300&page=1`),
+      ])
 
-    const [recentEntriesRes, recentExpensesRes] = await Promise.allSettled([
-      api.get('/dashboard/transactions?type=INCOME&limit=5&page=1'),
-      api.get('/dashboard/transactions?type=EXPENSE&limit=5&page=1'),
-    ])
+      const [recentEntriesRes, recentExpensesRes] = await Promise.allSettled([
+        api.get('/dashboard/transactions?type=INCOME&limit=5&page=1'),
+        api.get('/dashboard/transactions?type=EXPENSE&limit=5&page=1'),
+      ])
 
-    if (evolutionRes.status === 'fulfilled') setEvolution(evolutionRes.value.data)
-    else setEvolution([])
+      if (evolutionRes.status === 'fulfilled') setEvolution(evolutionRes.value.data)
+      else setEvolution([])
 
-    if (categoriesRes.status === 'fulfilled') setCategories(categoriesRes.value.data)
-    else setCategories([])
+      if (categoriesRes.status === 'fulfilled') setCategories(categoriesRes.value.data)
+      else setCategories([])
 
-    if (teamRes.status === 'fulfilled') setTeamReport(teamRes.value.data)
-    else setTeamReport(null)
+      if (teamRes.status === 'fulfilled') setTeamReport(teamRes.value.data)
+      else setTeamReport(null)
 
-    if (goalsRes.status === 'fulfilled') setGoals(goalsRes.value.data)
-    else setGoals([])
+      if (goalsRes.status === 'fulfilled') setGoals(goalsRes.value.data)
+      else setGoals([])
 
-    if (settingsRes.status === 'fulfilled') setSettings(settingsRes.value.data)
-    else setSettings(null)
+      if (settingsRes.status === 'fulfilled') setSettings(settingsRes.value.data)
+      else setSettings(null)
 
-    if (nextMonthCardBillRes.status === 'fulfilled') {
-      const txs = (nextMonthCardBillRes.value.data?.transactions || [])
-        .filter((tx: any) => tx?.type === 'EXPENSE' && tx?.paymentMethod === 'CREDIT_CARD')
-        .sort((a: any, b: any) => {
-          const aTime = new Date(a?.dueDate || a?.date || 0).getTime()
-          const bTime = new Date(b?.dueDate || b?.date || 0).getTime()
-          return aTime - bTime
+      if (nextMonthCardBillRes.status === 'fulfilled') {
+        const txs = (nextMonthCardBillRes.value.data?.transactions || [])
+          .filter((tx: any) => tx?.type === 'EXPENSE' && tx?.paymentMethod === 'CREDIT_CARD')
+          .sort((a: any, b: any) => {
+            const aTime = new Date(a?.dueDate || a?.date || 0).getTime()
+            const bTime = new Date(b?.dueDate || b?.date || 0).getTime()
+            return aTime - bTime
+          })
+        const total = txs.reduce((sum: number, tx: any) => sum + Number(tx?.amount || 0), 0)
+        setNextMonthCardBill({
+          month: formatMonthKeyToPtBr(nextMonthKey),
+          total,
+          items: txs.slice(0, 6),
         })
-      const total = txs.reduce((sum: number, tx: any) => sum + Number(tx?.amount || 0), 0)
-      setNextMonthCardBill({
-        month: formatMonthKeyToPtBr(nextMonthKey),
-        total,
-        items: txs.slice(0, 6),
-      })
-    } else {
-      setNextMonthCardBill({ month: formatMonthKeyToPtBr(nextMonthKey), total: 0, items: [] })
-    }
+      } else {
+        setNextMonthCardBill({ month: formatMonthKeyToPtBr(nextMonthKey), total: 0, items: [] })
+      }
 
-    if (recentEntriesRes.status === 'fulfilled') {
-      setRecentEntries((recentEntriesRes.value.data?.transactions || []).map((tx: any) => ({
-        id: tx.id,
-        description: cleanDescription(tx.description),
-        amount: Number(tx.amount || 0),
-        category: tx.category?.name || 'Outros',
-        paymentMethod: tx.paymentMethod || 'CASH',
-      })))
-    } else {
-      setRecentEntries([])
-    }
+      if (recentEntriesRes.status === 'fulfilled') {
+        setRecentEntries((recentEntriesRes.value.data?.transactions || []).map((tx: any) => ({
+          id: tx.id,
+          description: cleanDescription(tx.description),
+          amount: Number(tx.amount || 0),
+          category: tx.category?.name || 'Outros',
+          paymentMethod: tx.paymentMethod || 'CASH',
+        })))
+      } else {
+        setRecentEntries([])
+      }
 
-    if (recentExpensesRes.status === 'fulfilled') {
-      setRecentExpenses((recentExpensesRes.value.data?.transactions || []).map((tx: any) => ({
-        id: tx.id,
-        description: cleanDescription(tx.description),
-        amount: Number(tx.amount || 0),
-        category: tx.category?.name || 'Outros',
-        paymentMethod: tx.paymentMethod || 'CASH',
-      })))
-    } else {
-      setRecentExpenses([])
-    }
+      if (recentExpensesRes.status === 'fulfilled') {
+        setRecentExpenses((recentExpensesRes.value.data?.transactions || []).map((tx: any) => ({
+          id: tx.id,
+          description: cleanDescription(tx.description),
+          amount: Number(tx.amount || 0),
+          category: tx.category?.name || 'Outros',
+          paymentMethod: tx.paymentMethod || 'CASH',
+        })))
+      } else {
+        setRecentExpenses([])
+      }
 
-    await loadDiagnostics()
-    setLoading(false)
+      if (force || Date.now() - diagnosticsLastLoadAtRef.current > 60000) {
+        await loadDiagnostics()
+        diagnosticsLastLoadAtRef.current = Date.now()
+      }
+    } finally {
+      dashboardLoadInFlightRef.current = false
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
-    loadDashboardData()
+    loadDashboardData(true)
   }, [])
 
   useEffect(() => {
@@ -1019,7 +1034,7 @@ export default function DashboardPage() {
           <p className="text-slate-400 text-sm mt-2">{loadError || 'Tente novamente em alguns instantes.'}</p>
           <button
             type="button"
-            onClick={loadDashboardData}
+            onClick={() => loadDashboardData(true)}
             className="mt-4 rounded-lg bg-cyan-500 hover:bg-cyan-400 text-slate-900 font-semibold px-4 py-2"
           >
             Tentar novamente

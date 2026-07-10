@@ -1,6 +1,13 @@
 import jwt from 'jsonwebtoken'
 
-const SECRET = process.env.JWT_SECRET || 'dev_secret_change_in_production'
+const isProduction = String(process.env.NODE_ENV || '').toLowerCase() === 'production'
+const configuredSecret = String(process.env.JWT_SECRET || '').trim()
+
+if (isProduction && !configuredSecret) {
+  throw new Error('JWT_SECRET obrigatório em produção.')
+}
+
+const SECRET = configuredSecret || 'dev_secret_change_in_production'
 
 /**
  * Middleware de autenticação JWT
