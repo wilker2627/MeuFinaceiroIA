@@ -227,6 +227,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
   const [nextMonthCardBill, setNextMonthCardBill] = useState<{ month: string; total: number; items: any[] }>({ month: '', total: 0, items: [] })
+  const [loadMetrics, setLoadMetrics] = useState<{ source: 'bootstrap' | 'legacy'; serverMs: number | null; clientMs: number | null } | null>(null)
   const dashboardLoadInFlightRef = useRef(false)
   const dashboardLastLoadAtRef = useRef(0)
   const diagnosticsLastLoadAtRef = useRef(0)
@@ -245,6 +246,7 @@ export default function DashboardPage() {
   }
 
   async function loadDashboardData(force = false) {
+    const clientStart = Date.now()
     const nowTs = Date.now()
     if (!force && dashboardLoadInFlightRef.current) return
     if (!force && nowTs - dashboardLastLoadAtRef.current < 900) return
@@ -256,9 +258,16 @@ export default function DashboardPage() {
 
     try {
       try {
-        const { data: bootstrapData } = await api.get('/dashboard/bootstrap?months=6')
+        const bootstrapResponse = await api.get('/dashboard/bootstrap?months=6')
+        const bootstrapData = bootstrapResponse?.data
 
         if (bootstrapData?.summary) {
+          const serverHeaderMs = Number(bootstrapResponse?.headers?.['x-bootstrap-duration-ms'])
+          const payloadServerMs = Number(bootstrapData?.metrics?.durationMs)
+          const serverMs = Number.isFinite(serverHeaderMs)
+            ? serverHeaderMs
+            : (Number.isFinite(payloadServerMs) ? payloadServerMs : null)
+
           setSummary(bootstrapData.summary)
           setTotalBalanceInput(String(Number(bootstrapData?.summary?.balance?.total || 0).toFixed(2)).replace('.', ','))
           setEvolution(Array.isArray(bootstrapData?.evolution) ? bootstrapData.evolution : [])
@@ -302,6 +311,12 @@ export default function DashboardPage() {
             await loadDiagnostics()
             diagnosticsLastLoadAtRef.current = Date.now()
           }
+
+          setLoadMetrics({
+            source: 'bootstrap',
+            serverMs,
+            clientMs: Date.now() - clientStart
+          })
 
           return
         }
@@ -398,6 +413,12 @@ export default function DashboardPage() {
         await loadDiagnostics()
         diagnosticsLastLoadAtRef.current = Date.now()
       }
+
+      setLoadMetrics({
+        source: 'legacy',
+        serverMs: null,
+        clientMs: Date.now() - clientStart
+      })
     } finally {
       dashboardLoadInFlightRef.current = false
       setLoading(false)
@@ -1181,6 +1202,11 @@ export default function DashboardPage() {
               <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/80">Assistente Financeiro</p>
               <h1 className="mt-3 text-2xl font-black leading-tight text-white">Resumo do seu dia</h1>
               <p className="mt-2 text-sm text-slate-300">{currentDateLabel}</p>
+              {loadMetrics && (
+                <p className="mt-2 text-[11px] text-slate-500">
+                  Carga: {loadMetrics.source} • cliente {loadMetrics.clientMs ?? '-'}ms{loadMetrics.serverMs !== null ? ` • api ${loadMetrics.serverMs}ms` : ''}
+                </p>
+              )}
 
               <div className="mt-5 rounded-2xl border border-slate-700/80 bg-slate-950/80 p-4">
                 <div className="flex items-center gap-3">

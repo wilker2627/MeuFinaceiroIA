@@ -89,6 +89,7 @@ apiRouter.get('/summary', async (req, res) => {
 
 // GET /api/dashboard/bootstrap?months=6
 apiRouter.get('/bootstrap', async (req, res) => {
+  const bootstrapStartedAt = Date.now()
   const months = Math.min(Math.max(parseInt(req.query.months) || 6, 1), 24)
   const now = new Date()
   const nextMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 1)
@@ -122,6 +123,10 @@ apiRouter.get('/bootstrap', async (req, res) => {
 
   const nextMonthTotal = nextMonthTransactions.reduce((sum, tx) => sum + Number(tx.amount || 0), 0)
 
+  const durationMs = Date.now() - bootstrapStartedAt
+  res.setHeader('Server-Timing', `bootstrap;dur=${durationMs}`)
+  res.setHeader('X-Bootstrap-Duration-Ms', String(durationMs))
+
   res.json({
     summary,
     evolution,
@@ -135,7 +140,10 @@ apiRouter.get('/bootstrap', async (req, res) => {
       items: nextMonthTransactions.slice(0, 6)
     },
     recentEntries: summary?.family?.recentEntries || [],
-    recentExpenses: summary?.family?.recentExpenses || []
+    recentExpenses: summary?.family?.recentExpenses || [],
+    metrics: {
+      durationMs
+    }
   })
 })
 
