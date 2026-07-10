@@ -32,13 +32,13 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/icon?v=20260709r1', type: 'image/png' },
-      { url: '/favicon.ico?v=20260709r1', type: 'image/x-icon' }
+      { url: '/icon?v=20260709r2', type: 'image/png' },
+      { url: '/favicon.ico?v=20260709r2', type: 'image/x-icon' }
     ],
     apple: [
-      { url: '/apple-icon?v=20260709r1', sizes: '180x180', type: 'image/png' },
-      { url: '/apple-icon?v=20260709r1', sizes: '192x192', type: 'image/png' },
-      { url: '/apple-icon?v=20260709r1', sizes: '152x152', type: 'image/png' }
+      { url: '/apple-icon?v=20260709r2', sizes: '180x180', type: 'image/png' },
+      { url: '/apple-icon?v=20260709r2', sizes: '192x192', type: 'image/png' },
+      { url: '/apple-icon?v=20260709r2', sizes: '152x152', type: 'image/png' }
     ]
   }
 };

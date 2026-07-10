@@ -1111,7 +1111,7 @@ export default function DashboardPage() {
             <div className="rounded-3xl border border-cyan-400/25 bg-slate-900/75 p-5 shadow-[0_18px_48px_rgba(2,8,23,0.55)] backdrop-blur-xl">
               <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/80">Assistente Financeiro</p>
               <h1 className="mt-3 text-2xl font-black leading-tight text-white">Resumo do seu dia</h1>
-              <p className="mt-2 text-sm text-slate-300">{currentDateLabel} • {summary.currentMonth}</p>
+              <p className="mt-2 text-sm text-slate-300">{currentDateLabel}</p>
 
               <div className="mt-5 rounded-2xl border border-slate-700/80 bg-slate-950/80 p-4">
                 <div className="flex items-center gap-3">

@@ -16,14 +16,14 @@ export default function manifest(): MetadataRoute.Manifest {
     categories: ['finance', 'productivity'],
     screenshots: [
       {
-        src: '/icon?v=20260709r1',
+        src: '/icon?v=20260709r2',
         sizes: '512x512',
         type: 'image/png',
         form_factor: 'wide',
         label: 'Dashboard do MeuFinanceiro'
       },
       {
-        src: '/icon?v=20260709r1',
+        src: '/icon?v=20260709r2',
         sizes: '192x192',
         type: 'image/png',
         form_factor: 'narrow',
@@ -32,25 +32,25 @@ export default function manifest(): MetadataRoute.Manifest {
     ],
     icons: [
       {
-        src: '/icon?v=20260709r1',
+        src: '/icon?v=20260709r2',
         sizes: '512x512',
         type: 'image/png',
         purpose: 'maskable'
       },
       {
-        src: '/apple-icon?v=20260709r1',
+        src: '/apple-icon?v=20260709r2',
         sizes: '180x180',
         type: 'image/png',
         purpose: 'any'
       },
       {
-        src: '/apple-icon?v=20260709r1',
+        src: '/apple-icon?v=20260709r2',
         sizes: '192x192',
         type: 'image/png',
         purpose: 'any'
       },
       {
-        src: '/apple-icon?v=20260709r1',
+        src: '/apple-icon?v=20260709r2',
         sizes: '152x152',
         type: 'image/png',
         purpose: 'any'
