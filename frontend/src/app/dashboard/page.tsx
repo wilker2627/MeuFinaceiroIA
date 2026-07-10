@@ -255,6 +255,18 @@ export default function DashboardPage() {
     return Number(cleaned)
   }
 
+  function clearLoadHistory() {
+    setLoadHistory([])
+    setLoadMetrics(null)
+
+    if (typeof window === 'undefined') return
+    try {
+      window.localStorage.removeItem(DASHBOARD_LOAD_HISTORY_STORAGE_KEY)
+    } catch {
+      // Ignore storage limitations.
+    }
+  }
+
   async function loadDashboardData(force = false) {
     const clientStart = Date.now()
     const nowTs = Date.now()
@@ -1319,6 +1331,15 @@ export default function DashboardPage() {
                 <p className="mt-1 text-[11px] text-slate-500">
                   Ultimos {loadHistory.length}: media {averageClientMs ?? '-'}ms • p95 {p95ClientMs ?? '-'}ms
                 </p>
+              )}
+              {loadHistory.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearLoadHistory}
+                  className="mt-2 inline-flex items-center rounded-lg border border-slate-700 bg-slate-900/70 px-2.5 py-1 text-[11px] font-semibold text-slate-300 hover:border-slate-500 hover:text-white"
+                >
+                  Limpar histórico
+                </button>
               )}
               {loadTrend && (
                 <p className={`mt-1 text-[11px] ${loadTrend.direction === 'improved' ? 'text-emerald-300' : loadTrend.direction === 'worse' ? 'text-rose-300' : 'text-slate-500'}`}>
