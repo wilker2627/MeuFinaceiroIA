@@ -141,6 +141,13 @@ type ReportPeriod = 'CURRENT_MONTH' | 'LAST_3_MONTHS' | 'LAST_12_MONTHS'
 
 type DisplayMood = 'EXCELLENT' | 'ATTENTION' | 'CAREFUL'
 
+type LoadMetricSample = {
+  source: 'bootstrap' | 'legacy'
+  serverMs: number | null
+  clientMs: number | null
+  at: number
+}
+
 const PERSON_TAG_REGEX = /\|\s*Pessoa:\s*(.+)$/i
 
 function extractPersonFromDescription(description?: string) {
@@ -228,6 +235,7 @@ export default function DashboardPage() {
   const [loadError, setLoadError] = useState('')
   const [nextMonthCardBill, setNextMonthCardBill] = useState<{ month: string; total: number; items: any[] }>({ month: '', total: 0, items: [] })
   const [loadMetrics, setLoadMetrics] = useState<{ source: 'bootstrap' | 'legacy'; serverMs: number | null; clientMs: number | null } | null>(null)
+  const [loadHistory, setLoadHistory] = useState<LoadMetricSample[]>([])
   const dashboardLoadInFlightRef = useRef(false)
   const dashboardLastLoadAtRef = useRef(0)
   const diagnosticsLastLoadAtRef = useRef(0)
@@ -317,6 +325,15 @@ export default function DashboardPage() {
             serverMs,
             clientMs: Date.now() - clientStart
           })
+          setLoadHistory((prev) => [
+            ...prev.slice(-9),
+            {
+              source: 'bootstrap',
+              serverMs,
+              clientMs: Date.now() - clientStart,
+              at: Date.now()
+            }
+          ])
 
           return
         }
@@ -419,6 +436,15 @@ export default function DashboardPage() {
         serverMs: null,
         clientMs: Date.now() - clientStart
       })
+      setLoadHistory((prev) => [
+        ...prev.slice(-9),
+        {
+          source: 'legacy',
+          serverMs: null,
+          clientMs: Date.now() - clientStart,
+          at: Date.now()
+        }
+      ])
     } finally {
       dashboardLoadInFlightRef.current = false
       setLoading(false)
@@ -1157,6 +1183,21 @@ export default function DashboardPage() {
         ? 'border-rose-400/35 bg-rose-400/10 text-rose-300'
         : 'border-amber-400/35 bg-amber-400/10 text-amber-300'
 
+  const recentClientTimes = loadHistory
+    .map((item) => Number(item.clientMs))
+    .filter((value) => Number.isFinite(value)) as number[]
+
+  const averageClientMs = recentClientTimes.length > 0
+    ? Math.round(recentClientTimes.reduce((sum, value) => sum + value, 0) / recentClientTimes.length)
+    : null
+
+  const p95ClientMs = (() => {
+    if (recentClientTimes.length === 0) return null
+    const sorted = [...recentClientTimes].sort((a, b) => a - b)
+    const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * 0.95) - 1))
+    return Math.round(sorted[idx])
+  })()
+
   // Componente de Card de Estatística Premium
   const PremiumStatCard = ({ label, value, icon: Icon, color, trend, note }: any) => {
     const colorClasses = {
@@ -1205,6 +1246,11 @@ export default function DashboardPage() {
               {loadMetrics && (
                 <p className="mt-2 text-[11px] text-slate-500">
                   Carga: {loadMetrics.source} • cliente {loadMetrics.clientMs ?? '-'}ms{loadMetrics.serverMs !== null ? ` • api ${loadMetrics.serverMs}ms` : ''}
+                </p>
+              )}
+              {loadHistory.length > 0 && (
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Ultimos {loadHistory.length}: media {averageClientMs ?? '-'}ms • p95 {p95ClientMs ?? '-'}ms
                 </p>
               )}
 
