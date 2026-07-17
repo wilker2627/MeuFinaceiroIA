@@ -151,6 +151,7 @@ type LoadMetricSample = {
 const DASHBOARD_LOAD_HISTORY_STORAGE_KEY = 'dashboard-load-history-v1'
 
 const PERSON_TAG_REGEX = /\|\s*Pessoa:\s*(.+)$/i
+const CARD_TAG_REGEX = /\|\s*Cartao:\s*([^|]+)/i
 
 function extractPersonFromDescription(description?: string) {
   const match = String(description || '').match(PERSON_TAG_REGEX)
@@ -158,7 +159,10 @@ function extractPersonFromDescription(description?: string) {
 }
 
 function cleanDescription(description?: string) {
-  return String(description || '').replace(PERSON_TAG_REGEX, '').trim()
+  return String(description || '')
+    .replace(CARD_TAG_REGEX, '')
+    .replace(PERSON_TAG_REGEX, '')
+    .trim()
 }
 
 const PAYMENT_METHOD_META: Record<string, { label: string; icon: any; className: string }> = {

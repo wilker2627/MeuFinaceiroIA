@@ -32,6 +32,20 @@ const PAYMENT_METHODS = [
   { value: 'DEBIT_CARD', label: 'Cartao de debito' },
 ] as const
 
+const CREDIT_CARD_BRANDS = [
+  'PAO DE ACUCAR',
+  'AZUL',
+  'SICREDI',
+  'MERCADO PAGO',
+  'BANCO DO BRASIL',
+  'BRADESCO',
+  'NUBANK',
+  'ITAU',
+  'BV',
+  'DIGIO',
+  'SANTANDER',
+] as const
+
 const PAYMENT_METHOD_META: Record<string, { label: string; icon: any; className: string }> = {
   PIX: { label: 'PIX', icon: QrCode, className: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
   CASH: { label: 'Dinheiro', icon: Wallet, className: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
@@ -41,7 +55,13 @@ const PAYMENT_METHOD_META: Record<string, { label: string; icon: any; className:
 
 const getPaymentMethodMeta = (method?: string) => PAYMENT_METHOD_META[method || 'CASH'] || PAYMENT_METHOD_META.CASH
 
+const CARD_TAG_REGEX = /\|\s*Cartao:\s*([^|]+)/i
 const PERSON_TAG_REGEX = /\|\s*Pessoa:\s*(.+)$/i
+
+function extractCardBrandFromDescription(description: string) {
+  const match = String(description || '').match(CARD_TAG_REGEX)
+  return match?.[1]?.trim() || ''
+}
 
 function extractPersonFromDescription(description: string) {
   const match = String(description || '').match(PERSON_TAG_REGEX)
@@ -49,7 +69,10 @@ function extractPersonFromDescription(description: string) {
 }
 
 function cleanDescription(description: string) {
-  return String(description || '').replace(PERSON_TAG_REGEX, '').trim()
+  return String(description || '')
+    .replace(CARD_TAG_REGEX, '')
+    .replace(PERSON_TAG_REGEX, '')
+    .trim()
 }
 
 function getInvoiceMonthKey(tx: Transaction) {
@@ -71,7 +94,17 @@ export default function TransactionsPage() {
   const [typeFilter, setTypeFilter] = useState('')
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ type: 'EXPENSE', amount: '', description: '', categoryId: '', paymentMethod: 'CASH', personName: '', installments: '1', creditBillingOption: '1' })
+  const [form, setForm] = useState<{ type: string; amount: string; description: string; categoryId: string; paymentMethod: string; personName: string; installments: string; creditBillingOption: string; cardBrand: string }>({
+    type: 'EXPENSE',
+    amount: '',
+    description: '',
+    categoryId: '',
+    paymentMethod: 'CASH',
+    personName: '',
+    installments: '1',
+    creditBillingOption: '1',
+    cardBrand: CREDIT_CARD_BRANDS[0]
+  })
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [categories, setCategories] = useState<any[]>([])
   const [accounts, setAccounts] = useState<any[]>([])
@@ -91,7 +124,7 @@ export default function TransactionsPage() {
   const getEffectiveDate = (tx: Transaction) => tx.type === 'EXPENSE' && tx.isPaid === false && tx.dueDate ? tx.dueDate : tx.date
 
   const groupedTransactions = useMemo(() => {
-    const invoiceMap = new Map<string, { monthKey: string; label: string; total: number; items: Transaction[] }>()
+    const invoiceMap = new Map<string, { monthKey: string; label: string; cardBrand: string; total: number; items: Transaction[] }>()
     const regularItems: Transaction[] = []
 
     transactions.forEach((tx) => {
@@ -101,16 +134,20 @@ export default function TransactionsPage() {
         return
       }
 
-      const existing = invoiceMap.get(invoiceMonthKey)
+      const cardBrand = extractCardBrandFromDescription(tx.description) || 'Sem cartao'
+      const invoiceKey = `${invoiceMonthKey}__${cardBrand}`
+
+      const existing = invoiceMap.get(invoiceKey)
       if (existing) {
         existing.items.push(tx)
         existing.total += Number(tx.amount || 0)
         return
       }
 
-      invoiceMap.set(invoiceMonthKey, {
+      invoiceMap.set(invoiceKey, {
         monthKey: invoiceMonthKey,
         label: formatInvoiceMonth(invoiceMonthKey),
+        cardBrand,
         total: Number(tx.amount || 0),
         items: [tx],
       })
@@ -183,7 +220,9 @@ export default function TransactionsPage() {
     try {
       const installments = isCreditExpense ? Math.min(Math.max(parseInt(form.creditBillingOption) || 1, 1), 12) : 1
       const baseAmount = Number(form.amount)
-      const baseDescription = form.personName.trim() ? `${form.description} | Pessoa: ${form.personName.trim()}` : form.description
+      const cardTag = isCreditExpense ? ` | Cartao: ${form.cardBrand}` : ''
+      const personTag = form.personName.trim() ? ` | Pessoa: ${form.personName.trim()}` : ''
+      const baseDescription = `${form.description}${cardTag}${personTag}`
       const currentBillDate = isCreditExpense && form.creditBillingOption === 'CURRENT_BILL' ? new Date() : undefined
 
       await api.post('/dashboard/transactions', {
@@ -202,7 +241,7 @@ export default function TransactionsPage() {
 
       addToast(`${form.type === 'EXPENSE' ? 'Despesa' : 'Entrada'} registrada com sucesso!`, 'success')
       setShowForm(false)
-      setForm({ type: 'EXPENSE', amount: '', description: '', categoryId: '', paymentMethod: 'CASH', personName: '', installments: '1', creditBillingOption: '1' })
+      setForm({ type: 'EXPENSE', amount: '', description: '', categoryId: '', paymentMethod: 'CASH', personName: '', installments: '1', creditBillingOption: '1', cardBrand: CREDIT_CARD_BRANDS[0] })
       load()
       triggerDashboardRefresh()
     } catch (err: any) {
@@ -415,6 +454,17 @@ export default function TransactionsPage() {
           </div>
           {isCreditExpense && (
             <div>
+              <label className="text-gray-400 text-sm block mb-1">Cartao</label>
+              <select value={form.cardBrand} onChange={e => setForm(p => ({ ...p, cardBrand: e.target.value }))}
+                className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
+                {CREDIT_CARD_BRANDS.map((card) => (
+                  <option key={card} value={card}>{card}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          {isCreditExpense && (
+            <div>
               <label className="text-gray-400 text-sm block mb-1">Fatura do cartao</label>
               <select value={form.creditBillingOption} onChange={e => setForm(p => ({ ...p, creditBillingOption: e.target.value }))}
                 className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
@@ -512,7 +562,7 @@ export default function TransactionsPage() {
                       {isOpen ? <ChevronDown size={18} className="text-violet-200" /> : <ChevronRight size={18} className="text-violet-200" />}
                       <div>
                         <p className="text-sm font-semibold text-white">Fatura de {group.label}</p>
-                        <p className="text-xs text-violet-100/75">{group.items.length} lançamento(s) no cartão</p>
+                        <p className="text-xs text-violet-100/75">{group.cardBrand} • {group.items.length} lançamento(s)</p>
                       </div>
                     </div>
                     <p className="text-lg font-black text-violet-100">{formatCurrency(group.total)}</p>

@@ -10,6 +10,7 @@ import { triggerDashboardRefresh } from '@/lib/dashboardRefresh'
 interface BillTransaction {
   id: string
   description: string
+  cardBrand?: string
   amount: number
   date: string
   dueDate?: string
@@ -20,6 +21,23 @@ interface BillTransaction {
   installmentNumber?: number | null
   groupId?: string | null
 }
+
+const CREDIT_CARD_BRANDS = [
+  'PAO DE ACUCAR',
+  'AZUL',
+  'SICREDI',
+  'MERCADO PAGO',
+  'BANCO DO BRASIL',
+  'BRADESCO',
+  'NUBANK',
+  'ITAU',
+  'BV',
+  'DIGIO',
+  'SANTANDER',
+] as const
+
+const CARD_TAG_REGEX = /\|\s*Cartao:\s*([^|]+)/i
+const PERSON_TAG_REGEX = /\|\s*Pessoa:\s*(.+)$/i
 
 interface BillMonth {
   monthKey: string
@@ -45,7 +63,15 @@ function startOfMonthKey(monthKey: string) {
 }
 
 function cleanDescription(description: string) {
-  return String(description || '').replace(/\|\s*Pessoa:\s*(.+)$/i, '').trim()
+  return String(description || '')
+    .replace(CARD_TAG_REGEX, '')
+    .replace(PERSON_TAG_REGEX, '')
+    .trim()
+}
+
+function extractCardBrandFromDescription(description: string) {
+  const match = String(description || '').match(CARD_TAG_REGEX)
+  return match?.[1]?.trim() || 'Sem cartao'
 }
 
 export default function BillsPage() {
@@ -58,7 +84,14 @@ export default function BillsPage() {
   const [accounts, setAccounts] = useState<any[]>([])
   const [paying, setPaying] = useState(false)
   const [selectedAccountId, setSelectedAccountId] = useState('')
-  const [form, setForm] = useState({ description: '', amount: '', bankName: '', dueMonth: '', personName: '', installments: '1' })
+  const [form, setForm] = useState<{ description: string; amount: string; cardBrand: string; dueMonth: string; personName: string; installments: string }>({
+    description: '',
+    amount: '',
+    cardBrand: CREDIT_CARD_BRANDS[0],
+    dueMonth: '',
+    personName: '',
+    installments: '1'
+  })
 
   const currentMonthKey = useMemo(() => monthKeyFromDate(new Date()), [])
 
@@ -73,7 +106,12 @@ export default function BillsPage() {
 
       const responses = await Promise.all(monthKeys.map(async (monthKey) => {
         const { data } = await api.get(`/dashboard/transactions?month=${monthKey}&monthField=dueDate&type=EXPENSE&paymentMethod=CREDIT_CARD&limit=500&page=1`)
-        const items = (data?.transactions || []).filter((tx: BillTransaction) => tx.paymentMethod === 'CREDIT_CARD')
+        const items = (data?.transactions || [])
+          .filter((tx: BillTransaction) => tx.paymentMethod === 'CREDIT_CARD')
+          .map((tx: BillTransaction) => ({
+            ...tx,
+            cardBrand: extractCardBrandFromDescription(tx.description)
+          }))
         const unpaidItems = items.filter((tx: BillTransaction) => !tx.isPaid)
         const total = items.reduce((sum: number, tx: BillTransaction) => sum + Number(tx.amount || 0), 0)
         const unpaidTotal = unpaidItems.reduce((sum: number, tx: BillTransaction) => sum + Number(tx.amount || 0), 0)
@@ -114,12 +152,14 @@ export default function BillsPage() {
     setSaving(true)
     try {
       const dueDate = new Date(startOfMonthKey(form.dueMonth))
+      const personTag = form.personName.trim() ? ` | Pessoa: ${form.personName.trim()}` : ''
+      const descriptionWithCard = `${form.description} | Cartao: ${form.cardBrand}${personTag}`
       if (entryMode === 'INSTALLMENT_PURCHASE') {
         const installments = Math.min(Math.max(parseInt(form.installments) || 1, 1), 12)
         await api.post('/dashboard/transactions', {
           type: 'EXPENSE',
           amount: Number(form.amount),
-          description: form.bankName ? `${form.description} - ${form.bankName}` : form.description,
+          description: descriptionWithCard,
           paymentMethod: 'CREDIT_CARD',
           dueDate: dueDate.toISOString(),
           isPaid: false,
@@ -130,7 +170,7 @@ export default function BillsPage() {
         await api.post('/dashboard/transactions', {
           type: 'EXPENSE',
           amount: Number(form.amount),
-          description: form.bankName ? `${form.description} - ${form.bankName}` : form.description,
+          description: descriptionWithCard,
           paymentMethod: 'CREDIT_CARD',
           dueDate: dueDate.toISOString(),
           isPaid: false,
@@ -140,7 +180,7 @@ export default function BillsPage() {
       }
 
       addToast('Fatura incluida com sucesso!', 'success')
-      setForm({ description: '', amount: '', bankName: '', dueMonth: '', personName: '', installments: '1' })
+      setForm({ description: '', amount: '', cardBrand: CREDIT_CARD_BRANDS[0], dueMonth: '', personName: '', installments: '1' })
       await loadBills()
       triggerDashboardRefresh()
     } catch (error: any) {
@@ -234,6 +274,21 @@ export default function BillsPage() {
   }
 
   const selectedBills = bills.find((bill) => bill.monthKey === selectedMonth) || bills[0]
+  const selectedCardsSummary = useMemo(() => {
+    if (!selectedBills) return []
+    const grouped = new Map<string, { card: string; total: number; unpaid: number; count: number }>()
+
+    selectedBills.items.forEach((item) => {
+      const key = item.cardBrand || 'Sem cartao'
+      const current = grouped.get(key) || { card: key, total: 0, unpaid: 0, count: 0 }
+      current.total += Number(item.amount || 0)
+      current.count += 1
+      if (!item.isPaid) current.unpaid += Number(item.amount || 0)
+      grouped.set(key, current)
+    })
+
+    return Array.from(grouped.values()).sort((a, b) => b.total - a.total)
+  }, [selectedBills])
 
   return (
     <div className="relative p-4 md:p-6 space-y-6">
@@ -265,8 +320,12 @@ export default function BillsPage() {
               <input value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" placeholder="Ex: Mercado, roupa, viagem" />
             </div>
             <div>
-              <label className="text-xs text-slate-500 block mb-1">Banco / Cartão</label>
-              <input value={form.bankName} onChange={(e) => setForm((p) => ({ ...p, bankName: e.target.value }))} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" placeholder="Ex: Nubank, Inter, Itaú" />
+              <label className="text-xs text-slate-500 block mb-1">Cartão</label>
+              <select value={form.cardBrand} onChange={(e) => setForm((p) => ({ ...p, cardBrand: e.target.value }))} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">
+                {CREDIT_CARD_BRANDS.map((card) => (
+                  <option key={card} value={card}>{card}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="text-xs text-slate-500 block mb-1">Valor</label>
@@ -322,6 +381,22 @@ export default function BillsPage() {
                 </div>
               </div>
 
+              {selectedCardsSummary.length > 0 && (
+                <div className="mb-4 rounded-2xl border border-slate-700 bg-slate-950/70 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-violet-200/80 mb-3">Resumo por cartão</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {selectedCardsSummary.map((card) => (
+                      <div key={card.card} className="rounded-xl border border-violet-500/20 bg-violet-500/10 p-3">
+                        <p className="text-sm font-semibold text-white">{card.card}</p>
+                        <p className="text-xs text-slate-400 mt-1">{card.count} lançamento(s)</p>
+                        <p className="text-sm text-violet-100 mt-1">Total: {formatCurrency(card.total)}</p>
+                        <p className="text-xs text-amber-200 mt-1">Pendente: {formatCurrency(card.unpaid)}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="mb-4 rounded-2xl border border-slate-700 bg-slate-950/70 p-4 space-y-3">
                 <div className="flex flex-wrap items-end gap-3">
                   <div className="min-w-[220px] flex-1">
@@ -356,7 +431,7 @@ export default function BillsPage() {
                       <div>
                         <p className="text-white font-medium">{cleanDescription(item.description)}</p>
                         <p className="text-xs text-slate-500 mt-1">
-                          {item.category?.name || 'Sem categoria'} • {formatDate(item.dueDate || item.date)}
+                          {item.category?.name || 'Sem categoria'} • {item.cardBrand || 'Sem cartao'} • {formatDate(item.dueDate || item.date)}
                           {item.installments && item.installments > 1 ? ` • ${item.installmentNumber || 1}/${item.installments}` : ''}
                         </p>
                       </div>
