@@ -164,7 +164,29 @@ export default function TransactionsPage() {
       }))
       .sort((a, b) => a.monthKey.localeCompare(b.monthKey))
 
-    return { invoiceGroups, regularItems }
+    const monthlyInvoiceSummary = invoiceGroups.reduce((acc, group) => {
+      const existing = acc.get(group.monthKey) || {
+        monthKey: group.monthKey,
+        label: group.label,
+        total: 0,
+        pending: 0,
+        count: 0,
+      }
+
+      existing.total += group.total
+      existing.pending += group.items
+        .filter((item) => item.isPaid === false)
+        .reduce((sum, item) => sum + Number(item.amount || 0), 0)
+      existing.count += group.items.length
+      acc.set(group.monthKey, existing)
+      return acc
+    }, new Map<string, { monthKey: string; label: string; total: number; pending: number; count: number }>())
+
+    return {
+      invoiceGroups,
+      monthlyInvoiceSummary: Array.from(monthlyInvoiceSummary.values()).sort((a, b) => a.monthKey.localeCompare(b.monthKey)),
+      regularItems,
+    }
   }, [transactions])
 
   useEffect(() => {
@@ -548,6 +570,22 @@ export default function TransactionsPage() {
               />
               <span>Selecionar todos os lançamentos visíveis</span>
             </div>
+
+            {groupedTransactions.monthlyInvoiceSummary.length > 0 && (
+              <div className="rounded-2xl border border-violet-500/20 bg-violet-500/10 p-4">
+                <p className="text-xs uppercase tracking-[0.2em] text-violet-200/80 mb-3">Resumo geral das faturas</p>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {groupedTransactions.monthlyInvoiceSummary.map((summary) => (
+                    <div key={summary.monthKey} className="rounded-xl border border-violet-500/20 bg-slate-950/60 p-3">
+                      <p className="text-sm font-semibold text-white">{summary.label}</p>
+                      <p className="text-xs text-slate-400 mt-1">{summary.count} lançamento(s) no cartão</p>
+                      <p className="text-sm text-violet-100 mt-1">Total geral: {formatCurrency(summary.total)}</p>
+                      <p className="text-xs text-amber-200 mt-1">Pendente geral: {formatCurrency(summary.pending)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {groupedTransactions.invoiceGroups.map((group) => {
               const isOpen = openGroups[group.monthKey] ?? false
