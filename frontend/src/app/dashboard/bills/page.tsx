@@ -293,7 +293,7 @@ export default function BillsPage() {
   return (
     <div className="relative p-4 md:p-6 space-y-6">
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-28 -right-24 h-72 w-72 rounded-full bg-violet-500/10 blur-3xl" />
+        <div className="absolute -top-28 -right-24 h-72 w-72 rounded-full bg-cyan-500/10 blur-3xl" />
       </div>
 
       <div className="relative flex items-center justify-between gap-3">
@@ -301,16 +301,16 @@ export default function BillsPage() {
           <h1 className="text-2xl md:text-3xl font-black text-white">Faturas</h1>
           <p className="text-slate-400 text-sm mt-1">Veja as faturas dos proximos 12 meses e inclua as existentes do cartao.</p>
         </div>
-        <div className="rounded-2xl border border-violet-500/20 bg-violet-500/10 px-4 py-2 text-right">
-          <p className="text-[11px] uppercase tracking-[0.2em] text-violet-200/80">Próxima fatura</p>
-          <p className="text-sm font-semibold text-violet-100">{selectedBills?.label || 'Carregando...'}</p>
+        <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-2 text-right">
+          <p className="text-[11px] uppercase tracking-[0.2em] text-cyan-200/80">Próxima fatura</p>
+          <p className="text-sm font-semibold text-cyan-100">{selectedBills?.label || 'Carregando...'}</p>
         </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[1.1fr_1.4fr]">
         <form onSubmit={handleAddBill} className="rounded-3xl border border-slate-700/80 bg-slate-900/75 p-5 shadow-[0_16px_42px_rgba(2,8,23,0.45)] backdrop-blur-xl space-y-3">
           <div className="flex items-center gap-2">
-            <Plus size={16} className="text-violet-300" />
+            <Plus size={16} className="text-cyan-300" />
             <p className="text-sm font-semibold text-white">Incluir fatura existente</p>
           </div>
           <p className="text-xs text-slate-400">Informe a fatura e o app mostra o mês correto para pagar depois.</p>
@@ -340,7 +340,7 @@ export default function BillsPage() {
               <input value={form.personName} onChange={(e) => setForm((p) => ({ ...p, personName: e.target.value }))} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" placeholder="Ex: Maria" />
             </div>
           </div>
-          <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-violet-400 px-4 py-2.5 text-sm font-semibold text-slate-950 disabled:opacity-60">
+          <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-cyan-300 disabled:opacity-60">
             {saving && <Loader size={15} className="animate-spin" />}
             Incluir fatura
           </button>
@@ -348,7 +348,7 @@ export default function BillsPage() {
 
         <div className="rounded-3xl border border-slate-700/80 bg-slate-900/75 p-5 shadow-[0_16px_42px_rgba(2,8,23,0.45)] backdrop-blur-xl">
           <div className="mb-3 flex items-center gap-2">
-            <CalendarDays size={16} className="text-violet-300" />
+            <CalendarDays size={16} className="text-cyan-300" />
             <p className="text-sm font-semibold text-white">Resumo das faturas dos próximos 12 meses</p>
           </div>
           <div className="flex flex-wrap gap-2 mb-4">
@@ -357,7 +357,7 @@ export default function BillsPage() {
                 key={bill.monthKey}
                 type="button"
                 onClick={() => setSelectedMonth(bill.monthKey)}
-                className={`rounded-full px-3 py-1.5 text-xs border transition-colors ${selectedMonth === bill.monthKey ? 'border-violet-400 bg-violet-400/20 text-violet-100' : 'border-slate-700 bg-slate-950 text-slate-400 hover:text-white'}`}
+                className={`rounded-full px-3 py-1.5 text-xs border transition-colors ${selectedMonth === bill.monthKey ? 'border-cyan-400 bg-cyan-400/20 text-cyan-100' : 'border-slate-700 bg-slate-950 text-slate-400 hover:text-white'}`}
               >
                 {bill.label}
               </button>
@@ -369,9 +369,9 @@ export default function BillsPage() {
           ) : selectedBills ? (
             <>
               <div className="mb-4 grid gap-3 md:grid-cols-2">
-                <div className="rounded-2xl border border-violet-500/20 bg-violet-500/10 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-violet-200/80">Total da fatura</p>
-                  <p className="text-3xl font-black text-violet-100">{formatCurrency(selectedBills.total)}</p>
+                <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4">
+                  <p className="text-xs uppercase tracking-[0.2em] text-cyan-200/80">Total da fatura</p>
+                  <p className="text-3xl font-black text-cyan-100">{formatCurrency(selectedBills.total)}</p>
                   <p className="text-xs text-slate-400 mt-1">{selectedBills.items.length} lançamento(s) no mês selecionado</p>
                 </div>
                 <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
@@ -383,13 +383,13 @@ export default function BillsPage() {
 
               {selectedCardsSummary.length > 0 && (
                 <div className="mb-4 rounded-2xl border border-slate-700 bg-slate-950/70 p-4">
-                  <p className="text-xs uppercase tracking-[0.2em] text-violet-200/80 mb-3">Resumo por cartão</p>
+                  <p className="text-xs uppercase tracking-[0.2em] text-cyan-200/80 mb-3">Resumo por cartão</p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     {selectedCardsSummary.map((card) => (
-                      <div key={card.card} className="rounded-xl border border-violet-500/20 bg-violet-500/10 p-3">
+                      <div key={card.card} className="rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3">
                         <p className="text-sm font-semibold text-white">{card.card}</p>
                         <p className="text-xs text-slate-400 mt-1">{card.count} lançamento(s)</p>
-                        <p className="text-sm text-violet-100 mt-1">Total: {formatCurrency(card.total)}</p>
+                        <p className="text-sm text-cyan-100 mt-1">Total: {formatCurrency(card.total)}</p>
                         <p className="text-xs text-amber-200 mt-1">Pendente: {formatCurrency(card.unpaid)}</p>
                       </div>
                     ))}
@@ -436,7 +436,7 @@ export default function BillsPage() {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className={`font-semibold ${item.isPaid ? 'text-emerald-300' : 'text-violet-200'}`}>{formatCurrency(Number(item.amount || 0))}</p>
+                        <p className={`font-semibold ${item.isPaid ? 'text-emerald-300' : 'text-cyan-200'}`}>{formatCurrency(Number(item.amount || 0))}</p>
                         <p className={`text-[11px] ${item.isPaid ? 'text-emerald-200/70' : 'text-slate-500'}`}>{item.isPaid ? 'Pago' : 'Pendente'}</p>
                       </div>
                     </div>
@@ -501,7 +501,7 @@ export default function BillsPage() {
 
       <div className="rounded-3xl border border-slate-700/80 bg-slate-900/75 p-5 shadow-[0_16px_42px_rgba(2,8,23,0.35)] backdrop-blur-xl">
         <div className="mb-3 flex items-center gap-2">
-          <CreditCard size={16} className="text-violet-300" />
+          <CreditCard size={16} className="text-cyan-300" />
           <p className="text-sm font-semibold text-white">Como cadastrar</p>
         </div>
         <div className="grid gap-3 md:grid-cols-2 text-sm text-slate-300">
@@ -518,8 +518,8 @@ export default function BillsPage() {
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {bills.map((bill) => (
-          <div key={bill.monthKey} className="rounded-3xl border border-violet-500/20 bg-violet-500/10 p-4 shadow-[0_16px_42px_rgba(2,8,23,0.35)]">
-            <p className="text-xs uppercase tracking-[0.22em] text-violet-200/80">{bill.label}</p>
+          <div key={bill.monthKey} className="rounded-3xl border border-cyan-500/20 bg-cyan-500/10 p-4 shadow-[0_16px_42px_rgba(2,8,23,0.35)]">
+            <p className="text-xs uppercase tracking-[0.22em] text-cyan-200/80">{bill.label}</p>
             <p className="mt-1 text-2xl font-black text-white">{formatCurrency(bill.total)}</p>
             <p className="mt-1 text-xs text-slate-400">{bill.items.length} lançamento(s)</p>
           </div>
