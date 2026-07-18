@@ -124,7 +124,7 @@ export default function TransactionsPage() {
   const getEffectiveDate = (tx: Transaction) => tx.type === 'EXPENSE' && tx.isPaid === false && tx.dueDate ? tx.dueDate : tx.date
 
   const groupedTransactions = useMemo(() => {
-    const invoiceMap = new Map<string, { monthKey: string; label: string; cardBrand: string; total: number; items: Transaction[] }>()
+    const invoiceMap = new Map<string, { groupKey: string; monthKey: string; label: string; cardBrand: string; total: number; items: Transaction[] }>()
     const regularItems: Transaction[] = []
 
     transactions.forEach((tx) => {
@@ -145,6 +145,7 @@ export default function TransactionsPage() {
       }
 
       invoiceMap.set(invoiceKey, {
+        groupKey: invoiceKey,
         monthKey: invoiceMonthKey,
         label: formatInvoiceMonth(invoiceMonthKey),
         cardBrand,
@@ -193,7 +194,7 @@ export default function TransactionsPage() {
     setOpenGroups((prev) => {
       const next = { ...prev }
       groupedTransactions.invoiceGroups.forEach((group) => {
-        if (!(group.monthKey in next)) next[group.monthKey] = false
+        if (!(group.groupKey in next)) next[group.groupKey] = false
       })
       if (groupedTransactions.regularItems.length > 0 && !('regular' in next)) next.regular = true
       return next
@@ -588,12 +589,12 @@ export default function TransactionsPage() {
             )}
 
             {groupedTransactions.invoiceGroups.map((group) => {
-              const isOpen = openGroups[group.monthKey] ?? false
+              const isOpen = openGroups[group.groupKey] ?? false
               return (
-                <div key={group.monthKey} className="rounded-2xl border border-violet-500/20 bg-violet-500/10 overflow-hidden">
+                <div key={group.groupKey} className="rounded-2xl border border-violet-500/20 bg-violet-500/10 overflow-hidden">
                   <button
                     type="button"
-                    onClick={() => toggleGroup(group.monthKey)}
+                    onClick={() => toggleGroup(group.groupKey)}
                     className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left"
                   >
                     <div className="flex items-center gap-3">
