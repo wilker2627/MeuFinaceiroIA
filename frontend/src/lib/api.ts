@@ -13,7 +13,12 @@ const api = axios.create({
 
 api.interceptors.request.use((config) => {
   if (typeof window !== 'undefined') {
-    const token = localStorage.getItem('token')
+    let token: string | null = null
+    try {
+      token = localStorage.getItem('token')
+    } catch {
+      token = null
+    }
     if (token) config.headers.Authorization = `Bearer ${token}`
   }
   return config
@@ -26,8 +31,12 @@ api.interceptors.response.use(
     const shouldResetSession = status === 401 || status === 403
 
     if (shouldResetSession && typeof window !== 'undefined') {
-      localStorage.removeItem('token')
-      localStorage.removeItem('tenant')
+      try {
+        localStorage.removeItem('token')
+        localStorage.removeItem('tenant')
+      } catch {
+        // Ignore storage errors on restricted mobile/PWA contexts.
+      }
 
       const currentPath = window.location.pathname || ''
       const authPages = ['/login', '/register', '/admin/login']

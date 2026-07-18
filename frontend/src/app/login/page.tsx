@@ -24,20 +24,33 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    const raw = sessionStorage.getItem(LOGIN_DRAFT_KEY)
+    let raw: string | null = null
+    try {
+      raw = sessionStorage.getItem(LOGIN_DRAFT_KEY)
+    } catch {
+      raw = null
+    }
     if (!raw) return
     try {
       const parsed = JSON.parse(raw)
       if (typeof parsed.email === 'string') setEmail(parsed.email)
       if (typeof parsed.password === 'string') setPassword(parsed.password)
     } catch {
-      sessionStorage.removeItem(LOGIN_DRAFT_KEY)
+      try {
+        sessionStorage.removeItem(LOGIN_DRAFT_KEY)
+      } catch {
+        // Ignore storage errors.
+      }
     }
   }, [])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
-    sessionStorage.setItem(LOGIN_DRAFT_KEY, JSON.stringify({ email, password }))
+    try {
+      sessionStorage.setItem(LOGIN_DRAFT_KEY, JSON.stringify({ email, password }))
+    } catch {
+      // Ignore storage errors on restricted mobile/PWA contexts.
+    }
   }, [email, password])
 
   async function handleSubmit(e: React.FormEvent) {
@@ -45,7 +58,11 @@ export default function LoginPage() {
     setLoading(true)
     try {
       await login(email, password)
-      sessionStorage.removeItem(LOGIN_DRAFT_KEY)
+      try {
+        sessionStorage.removeItem(LOGIN_DRAFT_KEY)
+      } catch {
+        // Ignore storage errors.
+      }
       addToast('Bem-vindo! Entrando em seu dashboard...', 'success', 2000)
     } catch (err: any) {
       if (err.response?.status === 401) {
@@ -56,9 +73,17 @@ export default function LoginPage() {
             password
           })
 
-          localStorage.setItem('admin_token', data.token)
-          localStorage.setItem('admin_profile', JSON.stringify(data.admin))
-          sessionStorage.removeItem(LOGIN_DRAFT_KEY)
+          try {
+            localStorage.setItem('admin_token', data.token)
+            localStorage.setItem('admin_profile', JSON.stringify(data.admin))
+          } catch {
+            // Ignore storage errors on restricted mobile/PWA contexts.
+          }
+          try {
+            sessionStorage.removeItem(LOGIN_DRAFT_KEY)
+          } catch {
+            // Ignore storage errors.
+          }
           addToast('Login admin detectado. Redirecionando para o painel administrativo...', 'info', 1800)
           window.location.href = '/admin/dashboard'
           return

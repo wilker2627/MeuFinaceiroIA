@@ -28,12 +28,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const router = useRouter()
 
+  function safeStorageGet(key: string) {
+    try {
+      if (typeof window === 'undefined') return null
+      return localStorage.getItem(key)
+    } catch {
+      return null
+    }
+  }
+
+  function safeStorageSet(key: string, value: string) {
+    try {
+      if (typeof window === 'undefined') return
+      localStorage.setItem(key, value)
+    } catch {
+      // Ignore storage errors on restricted mobile/PWA contexts.
+    }
+  }
+
+  function safeStorageRemove(key: string) {
+    try {
+      if (typeof window === 'undefined') return
+      localStorage.removeItem(key)
+    } catch {
+      // Ignore storage errors on restricted mobile/PWA contexts.
+    }
+  }
+
   useEffect(() => {
-    const savedToken = localStorage.getItem('token')
-    const savedTenant = localStorage.getItem('tenant')
+    const savedToken = safeStorageGet('token')
+    const savedTenant = safeStorageGet('tenant')
     if (savedToken && savedTenant) {
       setToken(savedToken)
-      setTenant(JSON.parse(savedTenant))
+      try {
+        setTenant(JSON.parse(savedTenant))
+      } catch {
+        safeStorageRemove('tenant')
+      }
     }
     setLoading(false)
   }, [])
@@ -41,8 +72,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function login(email: string, password: string) {
     const normalizedEmail = String(email || '').trim().toLowerCase()
     const { data } = await api.post('/auth/login', { email: normalizedEmail, password })
-    localStorage.setItem('token', data.token)
-    localStorage.setItem('tenant', JSON.stringify(data.tenant))
+    safeStorageSet('token', data.token)
+    safeStorageSet('tenant', JSON.stringify(data.tenant))
     setToken(data.token)
     setTenant(data.tenant)
     router.push('/dashboard')
@@ -51,16 +82,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function register(name: string, email: string, password: string) {
     const normalizedEmail = String(email || '').trim().toLowerCase()
     const { data } = await api.post('/auth/register', { name, email: normalizedEmail, password })
-    localStorage.setItem('token', data.token)
-    localStorage.setItem('tenant', JSON.stringify(data.tenant))
+    safeStorageSet('token', data.token)
+    safeStorageSet('tenant', JSON.stringify(data.tenant))
     setToken(data.token)
     setTenant(data.tenant)
     router.push('/dashboard')
   }
 
   function logout() {
-    localStorage.removeItem('token')
-    localStorage.removeItem('tenant')
+    safeStorageRemove('token')
+    safeStorageRemove('tenant')
     setToken(null)
     setTenant(null)
     router.push('/login')
