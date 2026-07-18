@@ -46,6 +46,8 @@ const CREDIT_CARD_BRANDS = [
   'SANTANDER',
 ] as const
 
+const CUSTOM_CARD_VALUE = '__CUSTOM__'
+
 const PAYMENT_METHOD_META: Record<string, { label: string; icon: any; className: string }> = {
   PIX: { label: 'PIX', icon: QrCode, className: 'text-cyan-300 border-cyan-500/30 bg-cyan-500/10' },
   CASH: { label: 'Dinheiro', icon: Wallet, className: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' },
@@ -94,7 +96,7 @@ export default function TransactionsPage() {
   const [typeFilter, setTypeFilter] = useState('')
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState<{ type: string; amount: string; description: string; categoryId: string; paymentMethod: string; personName: string; installments: string; creditBillingOption: string; cardBrand: string }>({
+  const [form, setForm] = useState<{ type: string; amount: string; description: string; categoryId: string; paymentMethod: string; personName: string; installments: string; creditBillingOption: string; cardBrand: string; customCardBrand: string }>({
     type: 'EXPENSE',
     amount: '',
     description: '',
@@ -103,7 +105,8 @@ export default function TransactionsPage() {
     personName: '',
     installments: '1',
     creditBillingOption: '1',
-    cardBrand: CREDIT_CARD_BRANDS[0]
+    cardBrand: CREDIT_CARD_BRANDS[0],
+    customCardBrand: ''
   })
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [categories, setCategories] = useState<any[]>([])
@@ -116,6 +119,9 @@ export default function TransactionsPage() {
   const selectedFormPayment = getPaymentMethodMeta(form.paymentMethod)
   const selectedFilterPayment = paymentMethodFilter ? getPaymentMethodMeta(paymentMethodFilter) : null
   const isCreditExpense = form.type === 'EXPENSE' && form.paymentMethod === 'CREDIT_CARD'
+  const selectedCardBrand = form.cardBrand === CUSTOM_CARD_VALUE
+    ? form.customCardBrand.trim().toUpperCase()
+    : form.cardBrand
   const allVisibleSelected = transactions.length > 0 && transactions.every((tx) => selectedTransactionIds.includes(tx.id))
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
 
@@ -241,9 +247,15 @@ export default function TransactionsPage() {
     setFormErrors({})
     setSaving(true)
     try {
+      if (isCreditExpense && !selectedCardBrand) {
+        addToast('Informe o nome do banco/cartao para lancamento no credito.', 'error')
+        setSaving(false)
+        return
+      }
+
       const installments = isCreditExpense ? Math.min(Math.max(parseInt(form.creditBillingOption) || 1, 1), 12) : 1
       const baseAmount = Number(form.amount)
-      const cardTag = isCreditExpense ? ` | Cartao: ${form.cardBrand}` : ''
+      const cardTag = isCreditExpense ? ` | Cartao: ${selectedCardBrand}` : ''
       const personTag = form.personName.trim() ? ` | Pessoa: ${form.personName.trim()}` : ''
       const baseDescription = `${form.description}${cardTag}${personTag}`
       const currentBillDate = isCreditExpense && form.creditBillingOption === 'CURRENT_BILL' ? new Date() : undefined
@@ -264,7 +276,7 @@ export default function TransactionsPage() {
 
       addToast(`${form.type === 'EXPENSE' ? 'Despesa' : 'Entrada'} registrada com sucesso!`, 'success')
       setShowForm(false)
-      setForm({ type: 'EXPENSE', amount: '', description: '', categoryId: '', paymentMethod: 'CASH', personName: '', installments: '1', creditBillingOption: '1', cardBrand: CREDIT_CARD_BRANDS[0] })
+      setForm({ type: 'EXPENSE', amount: '', description: '', categoryId: '', paymentMethod: 'CASH', personName: '', installments: '1', creditBillingOption: '1', cardBrand: CREDIT_CARD_BRANDS[0], customCardBrand: '' })
       load()
       triggerDashboardRefresh()
     } catch (err: any) {
@@ -483,7 +495,20 @@ export default function TransactionsPage() {
                 {CREDIT_CARD_BRANDS.map((card) => (
                   <option key={card} value={card}>{card}</option>
                 ))}
+                <option value={CUSTOM_CARD_VALUE}>Outro (cadastrar banco/cartao)</option>
               </select>
+            </div>
+          )}
+          {isCreditExpense && form.cardBrand === CUSTOM_CARD_VALUE && (
+            <div className="col-span-2 md:col-span-3">
+              <label className="text-gray-400 text-sm block mb-1">Nome do banco/cartão</label>
+              <input
+                type="text"
+                value={form.customCardBrand}
+                onChange={e => setForm(p => ({ ...p, customCardBrand: e.target.value }))}
+                className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2"
+                placeholder="Ex: XP, C6, Inter..."
+              />
             </div>
           )}
           {isCreditExpense && (
