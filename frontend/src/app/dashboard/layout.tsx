@@ -7,7 +7,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
-  LayoutDashboard, ArrowUpDown, Users, LogOut, TrendingUp, Menu, X, ReceiptText
+  LayoutDashboard, ArrowUpDown, Settings, LogOut, TrendingUp, Menu, X, ReceiptText
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import ThemeToggle from '@/components/ThemeToggle'
@@ -17,7 +17,7 @@ const navItems = [
   { href: '/dashboard/transactions', label: 'Lançamentos', icon: ArrowUpDown },
   { href: '/dashboard/bills', label: 'Faturas', icon: ReceiptText },
   { href: '/dashboard/cashflow', label: 'Fluxo de Caixa', icon: TrendingUp },
-  { href: '/dashboard/team', label: 'Equipe', icon: Users },
+  { href: '/dashboard/settings', label: 'Configuração', icon: Settings },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
