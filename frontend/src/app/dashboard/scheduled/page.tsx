@@ -59,22 +59,22 @@ export default function ScheduledPage() {
       {showForm && (
         <form onSubmit={handleAdd} className={`p-6 grid grid-cols-2 md:grid-cols-4 gap-4 ${panelClass}`}>
           <div className="col-span-2">
-            <label className="text-gray-400 text-sm block mb-1">Descrição</label>
+            <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Descrição</label>
             <input required value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))}
               className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2" placeholder="Ex: Energia elétrica" />
           </div>
           <div>
-            <label className="text-gray-400 text-sm block mb-1">Valor</label>
+            <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Valor</label>
             <input required type="number" step="0.01" value={form.amount} onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
               className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2" />
           </div>
           <div>
-            <label className="text-gray-400 text-sm block mb-1">Vencimento</label>
+            <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Vencimento</label>
             <input required type="date" value={form.dueDate} onChange={e => setForm(p => ({ ...p, dueDate: e.target.value }))}
               className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2" />
           </div>
           <div>
-            <label className="text-gray-400 text-sm block mb-1">Tipo</label>
+            <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Tipo</label>
             <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}
               className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
               <option value="EXPENSE">A Pagar</option>
@@ -96,12 +96,12 @@ export default function ScheduledPage() {
             <AnimatedCurrency value={payable.reduce((s, p) => s + p.amount, 0)} className="text-red-400 font-bold" />
           </div>
           {payable.length === 0 ? (
-            <p className="text-center text-gray-500 py-10">Nenhuma conta a pagar</p>
+            <p className="text-center text-slate-500 py-10">Nenhuma conta a pagar</p>
           ) : payable.map(p => (
             <div key={p.id} className="flex items-center justify-between px-6 py-4 border-b border-cyan-500/15 last:border-0">
               <div>
                 <div className="text-white text-sm">{p.description}</div>
-                <div className="text-gray-500 text-xs mt-0.5">Vence: {formatDate(p.dueDate)}{p.user ? ` · ${p.user.name}` : ''}</div>
+                <div className="text-slate-500 text-xs mt-0.5">Vence: {formatDate(p.dueDate)}{p.user ? ` · ${p.user.name}` : ''}</div>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-red-400 font-semibold">{formatCurrency(p.amount)}</span>
@@ -120,12 +120,12 @@ export default function ScheduledPage() {
             <AnimatedCurrency value={receivable.reduce((s, p) => s + p.amount, 0)} className="text-green-400 font-bold" />
           </div>
           {receivable.length === 0 ? (
-            <p className="text-center text-gray-500 py-10">Nenhum valor a receber</p>
+            <p className="text-center text-slate-500 py-10">Nenhum valor a receber</p>
           ) : receivable.map(p => (
             <div key={p.id} className="flex items-center justify-between px-6 py-4 border-b border-cyan-500/15 last:border-0">
               <div>
                 <div className="text-white text-sm">{p.description}</div>
-                <div className="text-gray-500 text-xs mt-0.5">Previsto: {formatDate(p.dueDate)}</div>
+                <div className="text-slate-500 text-xs mt-0.5">Previsto: {formatDate(p.dueDate)}</div>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-green-400 font-semibold">{formatCurrency(p.amount)}</span>

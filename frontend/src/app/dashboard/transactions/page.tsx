@@ -421,7 +421,7 @@ export default function TransactionsPage() {
       {showForm && (
         <form onSubmit={handleAdd} className={`p-6 grid grid-cols-2 md:grid-cols-6 gap-4 ${panelClass}`}>
           <div>
-            <label className="text-gray-400 text-sm block mb-1">Tipo</label>
+            <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Tipo</label>
             <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}
               className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
               <option value="EXPENSE">Saída</option>
@@ -429,7 +429,7 @@ export default function TransactionsPage() {
             </select>
           </div>
           <div>
-            <label className="text-gray-400 text-sm block mb-1">Valor (R$)</label>
+            <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Valor (R$)</label>
             <input type="number" step="0.01" required value={form.amount} onChange={e => {
               setForm(p => ({ ...p, amount: e.target.value }))
               if (e.target.value) {
@@ -445,7 +445,7 @@ export default function TransactionsPage() {
             {formErrors.amount && <p className="text-rose-400 text-xs mt-1">{formErrors.amount}</p>}
           </div>
           <div className="col-span-2">
-            <label className="text-gray-400 text-sm block mb-1">Descrição</label>
+            <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Descrição</label>
             <input type="text" required value={form.description} onChange={e => {
               setForm(p => ({ ...p, description: e.target.value }))
               if (e.target.value) {
@@ -461,12 +461,12 @@ export default function TransactionsPage() {
             {formErrors.description && <p className="text-rose-400 text-xs mt-1">{formErrors.description}</p>}
           </div>
           <div>
-            <label className="text-gray-400 text-sm block mb-1">Pessoa</label>
+            <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Pessoa</label>
             <input type="text" value={form.personName} onChange={e => setForm(p => ({ ...p, personName: e.target.value }))}
               className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2" placeholder="Ex: Maria" />
           </div>
           <div>
-            <label className="text-gray-400 text-sm block mb-1">Categoria</label>
+            <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Categoria</label>
             <select value={form.categoryId} onChange={e => setForm(p => ({ ...p, categoryId: e.target.value }))}
               className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
               <option value="">Sem categoria</option>
@@ -476,7 +476,7 @@ export default function TransactionsPage() {
             </select>
           </div>
           <div>
-            <label className="text-gray-400 text-sm block mb-1">Forma de pagamento</label>
+            <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Forma de pagamento</label>
             <select value={form.paymentMethod} onChange={e => setForm(p => ({ ...p, paymentMethod: e.target.value }))}
               className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
               {PAYMENT_METHODS.map((method) => (
@@ -489,7 +489,7 @@ export default function TransactionsPage() {
           </div>
           {isCreditExpense && (
             <div>
-              <label className="text-gray-400 text-sm block mb-1">Cartao</label>
+              <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Cartao</label>
               <select value={form.cardBrand} onChange={e => setForm(p => ({ ...p, cardBrand: e.target.value }))}
                 className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
                 {CREDIT_CARD_BRANDS.map((card) => (
@@ -501,7 +501,7 @@ export default function TransactionsPage() {
           )}
           {isCreditExpense && form.cardBrand === CUSTOM_CARD_VALUE && (
             <div className="col-span-2 md:col-span-3">
-              <label className="text-gray-400 text-sm block mb-1">Nome do banco/cartão</label>
+              <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Nome do banco/cartão</label>
               <input
                 type="text"
                 value={form.customCardBrand}
@@ -513,7 +513,7 @@ export default function TransactionsPage() {
           )}
           {isCreditExpense && (
             <div>
-              <label className="text-gray-400 text-sm block mb-1">Fatura do cartao</label>
+              <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Fatura do cartao</label>
               <select value={form.creditBillingOption} onChange={e => setForm(p => ({ ...p, creditBillingOption: e.target.value }))}
                 className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
                 <option value="CURRENT_BILL">Fatura atual</option>
@@ -528,7 +528,7 @@ export default function TransactionsPage() {
               {saving && <Loader size={16} className="animate-spin" />}
               {saving ? 'Salvando...' : 'Salvar'}
             </button>
-            <button type="button" onClick={() => { setShowForm(false); setFormErrors({}) }} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg">Cancelar</button>
+            <button type="button" onClick={() => { setShowForm(false); setFormErrors({}) }} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg transition-colors">Cancelar</button>
           </div>
         </form>
       )}
