@@ -169,10 +169,10 @@ export default function WhatsAppPage() {
 
       {/* Instruções */}
       <div className={`p-6 ${panelClass}`}>
-        <h3 className="text-white font-semibold mb-4">💬 Como usar o assistente</h3>
+        <h3 className="text-white font-semibold mb-4">Como usar o assistente</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-gray-400">
           <div>
-            <div className="font-medium text-white mb-2">📝 Registrar lançamentos</div>
+            <div className="font-medium text-white mb-2">Registrar lançamentos</div>
             <div className="space-y-1 bg-slate-950 rounded-lg p-3 font-mono text-xs border border-cyan-500/15">
               <div className="text-green-400">"Paguei R$ 180 de gasolina"</div>
               <div className="text-green-400">"Recebi R$ 5.000 de salário"</div>
@@ -180,7 +180,7 @@ export default function WhatsAppPage() {
             </div>
           </div>
           <div>
-            <div className="font-medium text-white mb-2">📊 Consultar informações</div>
+            <div className="font-medium text-white mb-2">Consultar informações</div>
             <div className="space-y-1 bg-slate-950 rounded-lg p-3 font-mono text-xs border border-cyan-500/15">
               <div className="text-blue-400">"Saldo"</div>
               <div className="text-blue-400">"Resumo da família"</div>
@@ -189,14 +189,14 @@ export default function WhatsAppPage() {
             </div>
           </div>
           <div>
-            <div className="font-medium text-white mb-2">📅 Agendar contas</div>
+            <div className="font-medium text-white mb-2">Agendar contas</div>
             <div className="space-y-1 bg-slate-950 rounded-lg p-3 font-mono text-xs border border-cyan-500/15">
               <div className="text-yellow-400">"Agende energia R$ 540 dia 10"</div>
               <div className="text-yellow-400">"Pagar fornecedor R$ 3.200 dia 8"</div>
             </div>
           </div>
           <div>
-            <div className="font-medium text-white mb-2">🔀 Múltiplas contas</div>
+            <div className="font-medium text-white mb-2">Múltiplas contas</div>
             <div className="space-y-1 bg-slate-950 rounded-lg p-3 font-mono text-xs border border-cyan-500/15">
               <div className="text-purple-400">"na Ótica: paguei R$ 200"</div>
               <div className="text-purple-400">"na Família: mercado R$ 350"</div>

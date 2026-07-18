@@ -88,6 +88,7 @@ export default function SettingsPage() {
               show={showCurrent}
               onToggle={() => setShowCurrent((prev) => !prev)}
               placeholder="Digite sua senha atual"
+              autoComplete="current-password"
             />
 
             <PasswordField
@@ -97,6 +98,7 @@ export default function SettingsPage() {
               show={showNew}
               onToggle={() => setShowNew((prev) => !prev)}
               placeholder="Digite a nova senha"
+              autoComplete="new-password"
             />
 
             <PasswordField
@@ -106,6 +108,7 @@ export default function SettingsPage() {
               show={showConfirm}
               onToggle={() => setShowConfirm((prev) => !prev)}
               placeholder="Repita a nova senha"
+              autoComplete="new-password"
             />
 
             <div className="md:col-span-3 flex flex-wrap items-center gap-3 pt-2">
@@ -136,6 +139,7 @@ function PasswordField({
   show,
   onToggle,
   placeholder,
+  autoComplete,
 }: {
   label: string
   value: string
@@ -143,6 +147,7 @@ function PasswordField({
   show: boolean
   onToggle: () => void
   placeholder: string
+  autoComplete: string
 }) {
   return (
     <div>
@@ -154,7 +159,7 @@ function PasswordField({
           onChange={(e) => onChange(e.target.value)}
           className="w-full rounded-lg border border-cyan-500/20 bg-slate-950 px-3 py-2 pr-10 text-white"
           placeholder={placeholder}
-          autoComplete="current-password"
+          autoComplete={autoComplete}
         />
         <button
           type="button"

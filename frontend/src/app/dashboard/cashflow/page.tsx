@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import api from '@/lib/api'
 import { formatCurrency } from '@/lib/utils'
 import AnimatedCurrency from '@/components/AnimatedCurrency'
+import { BarChart3, ChartColumnIncreasing, PieChart, Users } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 
 export default function CashFlowPage() {
@@ -41,7 +42,10 @@ export default function CashFlowPage() {
 
       {/* Evolução 12 meses */}
       <div className={`p-6 ${panelClass}`}>
-        <h2 className="text-lg font-semibold text-white mb-4">📊 Entradas vs Saídas (12 meses)</h2>
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
+          <BarChart3 size={18} className="text-cyan-300" />
+          Entradas vs Saídas (12 meses)
+        </h2>
         <ResponsiveContainer width="100%" height={320}>
           <BarChart data={evolution}>
             <CartesianGrid strokeDasharray="3 3" stroke="#164e63" />
@@ -57,7 +61,10 @@ export default function CashFlowPage() {
 
       {/* Lucro mensal */}
       <div className={`p-6 ${panelClass}`}>
-        <h2 className="text-lg font-semibold text-white mb-4">📈 Lucro Mensal</h2>
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
+          <ChartColumnIncreasing size={18} className="text-cyan-300" />
+          Lucro Mensal
+        </h2>
         <ResponsiveContainer width="100%" height={220}>
           <BarChart data={evolution}>
             <CartesianGrid strokeDasharray="3 3" stroke="#164e63" />
@@ -72,7 +79,10 @@ export default function CashFlowPage() {
       {/* Relatório por pessoa */}
       {teamReport && teamReport.members.length > 0 && (
         <div className={`p-6 ${panelClass}`}>
-          <h2 className="text-lg font-semibold text-white mb-4">👥 Lançamentos por Pessoa — Mês Atual</h2>
+          <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
+            <Users size={18} className="text-cyan-300" />
+            Lançamentos por Pessoa - Mês Atual
+          </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-gray-400">
@@ -110,7 +120,10 @@ export default function CashFlowPage() {
 
       {/* Top categorias */}
       <div className={`p-6 ${panelClass}`}>
-        <h2 className="text-lg font-semibold text-white mb-4">📉 Top Categorias de Despesas</h2>
+        <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-white">
+          <PieChart size={18} className="text-cyan-300" />
+          Top Categorias de Despesas
+        </h2>
         <div className="space-y-3">
           {categories.slice(0, 8).map((cat: any, i: number) => {
             const max = categories[0]?.total || 1

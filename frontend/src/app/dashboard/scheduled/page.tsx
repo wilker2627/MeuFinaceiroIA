@@ -83,7 +83,7 @@ export default function ScheduledPage() {
           </div>
           <div className="flex items-end gap-2">
             <button type="submit" className="bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-semibold px-4 py-2 rounded-lg">Salvar</button>
-            <button type="button" onClick={() => setShowForm(false)} className="bg-slate-800 text-white px-4 py-2 rounded-lg">Cancelar</button>
+            <button type="button" onClick={() => setShowForm(false)} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg transition-colors">Cancelar</button>
           </div>
         </form>
       )}
@@ -92,11 +92,11 @@ export default function ScheduledPage() {
         {/* A PAGAR */}
         <div className={`${panelClass} overflow-hidden`}>
           <div className="flex items-center justify-between px-6 py-4 bg-rose-500/10 border-b border-cyan-500/15">
-            <h2 className="font-semibold text-white">🔴 Contas a Pagar</h2>
+            <h2 className="font-semibold text-white">Contas a Pagar</h2>
             <AnimatedCurrency value={payable.reduce((s, p) => s + p.amount, 0)} className="text-red-400 font-bold" />
           </div>
           {payable.length === 0 ? (
-            <p className="text-center text-gray-500 py-10">Nenhuma conta a pagar ✅</p>
+            <p className="text-center text-gray-500 py-10">Nenhuma conta a pagar</p>
           ) : payable.map(p => (
             <div key={p.id} className="flex items-center justify-between px-6 py-4 border-b border-cyan-500/15 last:border-0">
               <div>
@@ -116,7 +116,7 @@ export default function ScheduledPage() {
         {/* A RECEBER */}
         <div className={`${panelClass} overflow-hidden`}>
           <div className="flex items-center justify-between px-6 py-4 bg-emerald-500/10 border-b border-cyan-500/15">
-            <h2 className="font-semibold text-white">🟢 Contas a Receber</h2>
+            <h2 className="font-semibold text-white">Contas a Receber</h2>
             <AnimatedCurrency value={receivable.reduce((s, p) => s + p.amount, 0)} className="text-green-400 font-bold" />
           </div>
           {receivable.length === 0 ? (
