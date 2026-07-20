@@ -5,6 +5,7 @@ import api from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
+import { BrowserMultiFormatReader } from '@zxing/browser'
 import { Plus, Trash2, Search, CreditCard, Wallet, QrCode, Loader, ChevronDown, ChevronRight, PencilLine } from 'lucide-react'
 import ConfirmModal from '@/components/ConfirmModal'
 import EmptyState, { LoadingSkeleton } from '@/components/EmptyState'
@@ -211,7 +212,7 @@ export default function TransactionsPage() {
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const scanTimerRef = useRef<number | null>(null)
-  const barcodeDetectorRef = useRef<any>(null)
+  const scannerControlsRef = useRef<{ stop: () => void } | null>(null)
 
   const getResponsibleName = (tx: Transaction) => tx.user?.name || tx.from?.name || tx.to?.name || extractPersonFromDescription(tx.description) || 'Sem responsavel'
 
@@ -306,6 +307,14 @@ export default function TransactionsPage() {
       window.clearTimeout(scanTimerRef.current)
       scanTimerRef.current = null
     }
+    if (scannerControlsRef.current) {
+      try {
+        scannerControlsRef.current.stop()
+      } catch {
+        // Ignore stop errors from partially initialized streams.
+      }
+      scannerControlsRef.current = null
+    }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop())
       streamRef.current = null
@@ -388,41 +397,34 @@ export default function TransactionsPage() {
         await videoRef.current.play()
       }
 
-      const BarcodeDetectorCtor = (window as any).BarcodeDetector
-      if (!BarcodeDetectorCtor) {
-        throw new Error('Leitor de camera indisponivel neste navegador. Cole o codigo manualmente.')
+      setScannerLoading(false)
+
+      const reader = new BrowserMultiFormatReader()
+
+      const videoElement = videoRef.current
+      if (!videoElement) {
+        throw new Error('Nao foi possivel inicializar a camera.')
       }
 
-      barcodeDetectorRef.current = new BarcodeDetectorCtor({
-        formats: ['qr_code', 'code_128', 'code_39', 'ean_13', 'ean_8', 'itf']
-      })
-
-      const detectLoop = async () => {
-        if (!scannerOpen) return
-
-        try {
-          const videoEl = videoRef.current
-          if (videoEl && videoEl.readyState >= 2 && barcodeDetectorRef.current) {
-            const results = await barcodeDetectorRef.current.detect(videoEl)
-            if (Array.isArray(results) && results.length > 0) {
-              const rawValue = String(results[0]?.rawValue || '').trim()
-              if (rawValue) {
-                applyScannedCode(rawValue)
-                setScannerOpen(false)
-                stopScanner()
-                return
-              }
+      scannerControlsRef.current = await reader.decodeFromVideoDevice(
+        undefined,
+        videoElement,
+        (result, error) => {
+          if (result) {
+            const rawValue = String(result.getText()).trim()
+            if (rawValue) {
+              applyScannedCode(rawValue)
+              setScannerOpen(false)
+              stopScanner()
+              return
             }
           }
-        } catch {
-          // Keep scanning when transient camera frames fail.
+
+          if (error && String(error?.name || '') !== 'NotFoundException') {
+            setScannerError('Nao foi possivel ler a camera. Tente aproximar o codigo ou usar colar manualmente.')
+          }
         }
-
-        scanTimerRef.current = window.setTimeout(detectLoop, 280)
-      }
-
-      setScannerLoading(false)
-      detectLoop()
+      )
     } catch (err: any) {
       setScannerLoading(false)
       setScannerError(err?.message || 'Nao foi possivel abrir a camera.')
