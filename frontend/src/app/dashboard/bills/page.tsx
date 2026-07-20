@@ -92,10 +92,11 @@ export default function BillsPage() {
   const [paying, setPaying] = useState(false)
   const [selectedAccountId, setSelectedAccountId] = useState('')
   const [editingBillItem, setEditingBillItem] = useState<BillTransaction | null>(null)
-  const [editBillForm, setEditBillForm] = useState<{ amount: string; cardBrand: string; customCardBrand: string }>({
+  const [editBillForm, setEditBillForm] = useState<{ amount: string; cardBrand: string; customCardBrand: string; dueMonth: string }>({
     amount: '',
     cardBrand: CREDIT_CARD_BRANDS[0],
-    customCardBrand: ''
+    customCardBrand: '',
+    dueMonth: ''
   })
   const [form, setForm] = useState<{ description: string; amount: string; cardBrand: string; customCardBrand: string; dueMonth: string; personName: string; installments: string }>({
     description: '',
@@ -301,12 +302,15 @@ export default function BillsPage() {
   function openEditBillItem(item: BillTransaction) {
     const currentCardBrand = item.cardBrand || extractCardBrandFromDescription(item.description)
     const isKnownBrand = CREDIT_CARD_BRANDS.includes(currentCardBrand as typeof CREDIT_CARD_BRANDS[number])
+    const currentDueDate = new Date(item.dueDate || item.date)
+    const dueMonth = monthKeyFromDate(currentDueDate)
 
     setEditingBillItem(item)
     setEditBillForm({
       amount: String(Number(item.amount || 0).toFixed(2)),
       cardBrand: isKnownBrand ? currentCardBrand : CUSTOM_CARD_VALUE,
       customCardBrand: isKnownBrand ? '' : currentCardBrand,
+      dueMonth,
     })
   }
 
@@ -331,15 +335,17 @@ export default function BillsPage() {
       const baseDescription = cleanDescription(editingBillItem.description)
       const personTag = currentPerson ? ` | Pessoa: ${currentPerson}` : ''
       const nextDescription = `${baseDescription} | Cartao: ${editSelectedCardBrand}${personTag}`
+      const nextDueDate = editBillForm.dueMonth ? new Date(startOfMonthKey(editBillForm.dueMonth)) : undefined
 
       await api.patch(`/dashboard/transactions/${editingBillItem.id}`, {
         amount: nextAmount,
         description: nextDescription,
+        dueDate: nextDueDate ? nextDueDate.toISOString() : undefined,
       })
 
       addToast('Fatura atualizada com sucesso.', 'success')
       setEditingBillItem(null)
-      setEditBillForm({ amount: '', cardBrand: CREDIT_CARD_BRANDS[0], customCardBrand: '' })
+      setEditBillForm({ amount: '', cardBrand: CREDIT_CARD_BRANDS[0], customCardBrand: '', dueMonth: '' })
       await loadBills()
       triggerDashboardRefresh()
     } catch (error: any) {
@@ -641,6 +647,16 @@ export default function BillsPage() {
                   ))}
                   <option value={CUSTOM_CARD_VALUE}>Outro (cadastrar banco/cartão)</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-slate-400">Mês da fatura</label>
+                <input
+                  type="month"
+                  value={editBillForm.dueMonth}
+                  onChange={(e) => setEditBillForm((p) => ({ ...p, dueMonth: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                />
               </div>
 
               {editBillForm.cardBrand === CUSTOM_CARD_VALUE && (
