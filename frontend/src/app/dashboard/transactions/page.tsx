@@ -132,6 +132,20 @@ export default function TransactionsPage() {
   const editSelectedCardBrand = editForm.cardBrand === CUSTOM_CARD_VALUE
     ? editForm.customCardBrand.trim().toUpperCase()
     : editForm.cardBrand
+  const isEditingCreditExpense = editingTransaction?.type === 'EXPENSE' && editingTransaction?.paymentMethod === 'CREDIT_CARD'
+  const editPreviewDescription = useMemo(() => {
+    if (!editingTransaction) return ''
+    const currentPerson = extractPersonFromDescription(editingTransaction.description)
+    const baseDescription = cleanDescription(editingTransaction.description)
+    const personTag = currentPerson ? ` | Pessoa: ${currentPerson}` : ''
+
+    if (isEditingCreditExpense) {
+      const cardTag = editSelectedCardBrand ? ` | Cartao: ${editSelectedCardBrand}` : ''
+      return `${baseDescription}${cardTag}${personTag}`
+    }
+
+    return `${baseDescription}${personTag}`
+  }, [editingTransaction, editSelectedCardBrand, isEditingCreditExpense])
   const allVisibleSelected = transactions.length > 0 && transactions.every((tx) => selectedTransactionIds.includes(tx.id))
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
 
@@ -824,6 +838,11 @@ export default function TransactionsPage() {
                   )}
                 </>
               )}
+
+              <div className="md:col-span-2 rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3">
+                <p className="text-xs uppercase tracking-[0.16em] text-cyan-200/80">Pré-visualização da descrição</p>
+                <p className="mt-1 text-sm text-cyan-100 break-words">{editPreviewDescription || 'Sem descrição'}</p>
+              </div>
 
               <div className="md:col-span-2 flex flex-wrap gap-2 pt-2">
                 <button
