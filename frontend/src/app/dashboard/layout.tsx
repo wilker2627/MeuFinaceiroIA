@@ -12,11 +12,20 @@ import {
 import { cn } from '@/lib/utils'
 import ThemeToggle from '@/components/ThemeToggle'
 
-const navItems = [
+const defaultNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/transactions', label: 'Lançamentos', icon: ArrowUpDown },
   { href: '/dashboard/bills', label: 'Faturas', icon: ReceiptText },
   { href: '/dashboard/cashflow', label: 'Fluxo de Caixa', icon: TrendingUp },
+  { href: '/dashboard/settings', label: 'Configuração', icon: Settings },
+]
+
+const businessNavItems = [
+  { href: '/dashboard', label: 'Empresa', icon: LayoutDashboard },
+  { href: '/dashboard/transactions', label: 'Operações', icon: ArrowUpDown },
+  { href: '/dashboard/bills', label: 'Faturas', icon: ReceiptText },
+  { href: '/dashboard/cashflow', label: 'Fluxo de Caixa', icon: TrendingUp },
+  { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: Menu },
   { href: '/dashboard/settings', label: 'Configuração', icon: Settings },
 ]
 
@@ -25,6 +34,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const pathname = usePathname()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const isBusinessPlan = String(tenant?.plan || '').toUpperCase() === 'EMPRESA'
+
+  const navItems = useMemo(
+    () => (isBusinessPlan ? businessNavItems : defaultNavItems),
+    [isBusinessPlan]
+  )
 
   useEffect(() => {
     if (!loading && !tenant) router.replace('/login')
@@ -120,7 +135,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           style={{ paddingTop: 'calc(var(--safe-area-inset-top) + 8px)' }}
         >
           <div>
-            <p className="text-xs text-slate-500 uppercase tracking-[0.22em]">Painel Financeiro</p>
+            <p className="text-xs text-slate-500 uppercase tracking-[0.22em]">{isBusinessPlan ? 'Painel Empresarial' : 'Painel Financeiro'}</p>
             <p className="text-sm font-semibold text-cyan-200">{currentSection}</p>
           </div>
           <button
@@ -167,11 +182,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
         <div className="hidden md:flex items-center justify-between px-6 py-4 border-b border-cyan-500/15 rounded-t-3xl bg-slate-900/70 backdrop-blur-xl">
           <div>
-            <p className="text-xs text-slate-500 uppercase tracking-[0.22em]">Painel Financeiro</p>
+            <p className="text-xs text-slate-500 uppercase tracking-[0.22em]">{isBusinessPlan ? 'Painel Empresarial' : 'Painel Financeiro'}</p>
             <p className="text-lg font-bold text-cyan-200">{currentSection}</p>
           </div>
-          <div className="text-xs text-slate-400 bg-cyan-500/10 border border-cyan-500/20 rounded-full px-3 py-1">
-            Conta: {tenant.name}
+          <div className="flex items-center gap-2">
+            {isBusinessPlan && (
+              <span className="text-xs text-amber-200 bg-amber-500/10 border border-amber-400/30 rounded-full px-3 py-1">
+                Modo Empresa
+              </span>
+            )}
+            <div className="text-xs text-slate-400 bg-cyan-500/10 border border-cyan-500/20 rounded-full px-3 py-1">
+              Conta: {tenant.name}
+            </div>
           </div>
         </div>
 

@@ -202,7 +202,7 @@ function getMoodLabel(mood: DisplayMood) {
 }
 
 export default function DashboardPage() {
-  const { logout } = useAuth()
+  const { tenant, logout } = useAuth()
   const [summary, setSummary] = useState<Summary | null>(null)
   const [evolution, setEvolution] = useState<any[]>([])
   const [categories, setCategories] = useState<any[]>([])
@@ -1208,6 +1208,7 @@ export default function DashboardPage() {
   }
 
   const now = new Date()
+  const isBusinessPlan = String(tenant?.plan || '').toUpperCase() === 'EMPRESA'
   const currentDateLabel = now.toLocaleDateString('pt-BR', {
     weekday: 'long',
     day: '2-digit',
@@ -1323,8 +1324,8 @@ export default function DashboardPage() {
         <div className="mx-auto grid max-w-[1500px] gap-5 xl:grid-cols-[290px_minmax(0,1fr)_330px]">
           <aside className="space-y-5">
             <div className="rounded-3xl border border-cyan-400/25 bg-slate-900/75 p-5 shadow-[0_18px_48px_rgba(2,8,23,0.55)] backdrop-blur-xl">
-              <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/80">Assistente Financeiro</p>
-              <h1 className="mt-3 text-2xl font-black leading-tight text-white">Resumo do seu dia</h1>
+              <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/80">{isBusinessPlan ? 'Operacao Empresarial' : 'Assistente Financeiro'}</p>
+              <h1 className="mt-3 text-2xl font-black leading-tight text-white">{isBusinessPlan ? 'Centro de comando da empresa' : 'Resumo do seu dia'}</h1>
               <p className="mt-2 text-sm text-slate-300">{currentDateLabel}</p>
               {loadMetrics && (
                 <p className="mt-2 text-[11px] text-slate-500">
@@ -1358,7 +1359,7 @@ export default function DashboardPage() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-white">Status: {mood.label}</p>
-                    <p className="text-xs text-slate-400">{mood.detail}</p>
+                    <p className="text-xs text-slate-400">{isBusinessPlan ? 'Visao consolidada da saude financeira da operacao.' : mood.detail}</p>
                     <p className="mt-1 text-[11px] text-slate-500">
                       {summary.family.health.overdueCount} em atraso • {summary.family.health.dueTodayCount} vencem hoje
                     </p>
@@ -1367,7 +1368,7 @@ export default function DashboardPage() {
                 <p className="mt-4 text-xs text-slate-400">Saldo disponível</p>
                 <p className="text-2xl font-black text-emerald-300">{formatCurrency(summary.balance.total)}</p>
                 <div className={`mt-3 rounded-xl border px-3 py-2 ${savingsHighlightClass}`}>
-                  <p className="text-[11px] uppercase tracking-[0.18em]">Saldo da poupanca</p>
+                  <p className="text-[11px] uppercase tracking-[0.18em]">{isBusinessPlan ? 'Reserva de caixa' : 'Saldo da poupanca'}</p>
                   <p className="mt-1 text-xl font-black">{formatCurrency(savingsSaved)}</p>
                 </div>
               </div>
@@ -1459,27 +1460,36 @@ export default function DashboardPage() {
               <div className="mb-5 rounded-2xl border border-cyan-500/25 bg-cyan-500/10 p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.2em] text-cyan-200/75">Visao Geral</p>
-                    <p className="mt-1 text-2xl font-black text-white">Painel Principal</p>
-                    <p className="text-sm text-slate-300">Seu fluxo financeiro em tempo real.</p>
+                    <p className="text-xs uppercase tracking-[0.2em] text-cyan-200/75">{isBusinessPlan ? 'Visao Executiva' : 'Visao Geral'}</p>
+                    <p className="mt-1 text-2xl font-black text-white">{isBusinessPlan ? 'Dashboard Empresarial' : 'Painel Principal'}</p>
+                    <p className="text-sm text-slate-300">{isBusinessPlan ? 'Controle operacional para decisao rapida do negocio.' : 'Seu fluxo financeiro em tempo real.'}</p>
                   </div>
                   <div className="rounded-xl border border-cyan-400/30 bg-cyan-500/15 p-2 text-cyan-200">
                     <Rocket size={20} />
                   </div>
                 </div>
+                {isBusinessPlan && (
+                  <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
+                    <Link href="/dashboard/transactions" className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-2 py-1.5 text-center text-cyan-200 hover:bg-cyan-400/20">Operacoes</Link>
+                    <Link href="/dashboard/bills" className="rounded-lg border border-violet-400/30 bg-violet-400/10 px-2 py-1.5 text-center text-violet-200 hover:bg-violet-400/20">Faturas</Link>
+                    <Link href="/dashboard/cashflow" className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2 py-1.5 text-center text-emerald-200 hover:bg-emerald-400/20">Fluxo de Caixa</Link>
+                    <Link href="/dashboard/whatsapp" className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-2 py-1.5 text-center text-amber-200 hover:bg-amber-400/20">WhatsApp</Link>
+                    <Link href="/dashboard/settings" className="rounded-lg border border-slate-500/30 bg-slate-500/10 px-2 py-1.5 text-center text-slate-200 hover:bg-slate-500/20">Configuracao</Link>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <PremiumStatCard label="Poupanca" value={savingsSaved} icon={PiggyBank} color={savingsStatus.tone} note={savingsStatus.note} />
-                <PremiumStatCard label="Saldo" value={summary.balance.total} icon={DollarSign} color="green" />
-                <PremiumStatCard label="Entradas" value={summary.cashFlow.income} icon={TrendingUp} color="blue" />
-                <PremiumStatCard label="Saidas" value={summary.cashFlow.expenses} icon={TrendingDown} color="red" />
+                <PremiumStatCard label={isBusinessPlan ? 'Reserva de caixa' : 'Poupanca'} value={savingsSaved} icon={PiggyBank} color={savingsStatus.tone} note={savingsStatus.note} />
+                <PremiumStatCard label={isBusinessPlan ? 'Saldo em caixa' : 'Saldo'} value={summary.balance.total} icon={DollarSign} color="green" />
+                <PremiumStatCard label={isBusinessPlan ? 'Receitas' : 'Entradas'} value={summary.cashFlow.income} icon={TrendingUp} color="blue" />
+                <PremiumStatCard label={isBusinessPlan ? 'Despesas' : 'Saidas'} value={summary.cashFlow.expenses} icon={TrendingDown} color="red" />
               </div>
 
               <div className="mt-5 grid grid-cols-1 gap-3 lg:grid-cols-2">
                 <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
                   <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm font-semibold text-white">Entradas recentes</p>
+                    <p className="text-sm font-semibold text-white">{isBusinessPlan ? 'Receitas recentes' : 'Entradas recentes'}</p>
                     <div className="text-right">
                       <p className="text-xs text-emerald-200/80">Total</p>
                       <p className="text-sm font-semibold text-emerald-200">{formatCurrency(recentEntries.reduce((sum, item) => sum + Number(item.amount || 0), 0))}</p>
@@ -1501,7 +1511,7 @@ export default function DashboardPage() {
 
                 <div className="rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4">
                   <div className="mb-3 flex items-center justify-between">
-                    <p className="text-sm font-semibold text-white">Saidas recentes</p>
+                    <p className="text-sm font-semibold text-white">{isBusinessPlan ? 'Despesas recentes' : 'Saidas recentes'}</p>
                     <div className="text-right">
                       <p className="text-xs text-rose-200/80">Total</p>
                       <p className="text-sm font-semibold text-rose-200">{formatCurrency(recentExpenses.reduce((sum, item) => sum + Number(item.amount || 0), 0))}</p>
@@ -1689,7 +1699,7 @@ export default function DashboardPage() {
 
             {teamReport && teamReport.members.length > 0 && (
               <div className="rounded-3xl border border-slate-700/80 bg-slate-900/75 p-4 shadow-[0_16px_42px_rgba(2,8,23,0.5)] backdrop-blur-xl">
-                <p className="mb-3 text-sm font-semibold text-white">Familia</p>
+                <p className="mb-3 text-sm font-semibold text-white">{isBusinessPlan ? 'Equipe' : 'Familia'}</p>
                 <div className="space-y-2">
                   {teamReport.members.slice(0, 4).map((member: any) => (
                     <div key={member.userId} className="rounded-xl border border-slate-700 bg-slate-950/70 p-2.5">
