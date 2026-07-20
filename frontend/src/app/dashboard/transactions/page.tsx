@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import api from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
-import { Plus, Trash2, Search, CreditCard, Wallet, QrCode, Loader, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Trash2, Search, CreditCard, Wallet, QrCode, Loader, ChevronDown, ChevronRight, PencilLine } from 'lucide-react'
 import ConfirmModal from '@/components/ConfirmModal'
 import EmptyState, { LoadingSkeleton } from '@/components/EmptyState'
 import ExportData from '@/components/ExportData'
@@ -115,6 +115,13 @@ export default function TransactionsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; txIds: string[] }>({ open: false, txIds: [] })
   const [deleting, setDeleting] = useState(false)
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([])
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
+  const [editForm, setEditForm] = useState<{ amount: string; cardBrand: string; customCardBrand: string; dueMonth: string }>({
+    amount: '',
+    cardBrand: CREDIT_CARD_BRANDS[0],
+    customCardBrand: '',
+    dueMonth: ''
+  })
   const panelClass = 'dashboard-panel rounded-2xl border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.45)]'
   const selectedFormPayment = getPaymentMethodMeta(form.paymentMethod)
   const selectedFilterPayment = paymentMethodFilter ? getPaymentMethodMeta(paymentMethodFilter) : null
@@ -122,6 +129,9 @@ export default function TransactionsPage() {
   const selectedCardBrand = form.cardBrand === CUSTOM_CARD_VALUE
     ? form.customCardBrand.trim().toUpperCase()
     : form.cardBrand
+  const editSelectedCardBrand = editForm.cardBrand === CUSTOM_CARD_VALUE
+    ? editForm.customCardBrand.trim().toUpperCase()
+    : editForm.cardBrand
   const allVisibleSelected = transactions.length > 0 && transactions.every((tx) => selectedTransactionIds.includes(tx.id))
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
 
@@ -324,6 +334,65 @@ export default function TransactionsPage() {
     setOpenGroups((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }))
   }
 
+  function openEditTransaction(tx: Transaction) {
+    const currentCardBrand = extractCardBrandFromDescription(tx.description)
+    const isKnownBrand = CREDIT_CARD_BRANDS.includes(currentCardBrand as typeof CREDIT_CARD_BRANDS[number])
+    const currentDueDate = new Date(getEffectiveDate(tx))
+
+    setEditingTransaction(tx)
+    setEditForm({
+      amount: String(Number(tx.amount || 0).toFixed(2)),
+      cardBrand: isKnownBrand ? currentCardBrand : CUSTOM_CARD_VALUE,
+      customCardBrand: isKnownBrand ? '' : currentCardBrand,
+      dueMonth: tx.type === 'EXPENSE' && tx.paymentMethod === 'CREDIT_CARD'
+        ? `${currentDueDate.getFullYear()}-${String(currentDueDate.getMonth() + 1).padStart(2, '0')}`
+        : ''
+    })
+  }
+
+  async function handleSaveEditTransaction(e: React.FormEvent) {
+    e.preventDefault()
+
+    if (!editingTransaction) return
+
+    const nextAmount = Number(String(editForm.amount || '').replace(',', '.'))
+    if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
+      addToast('Informe um valor valido.', 'error')
+      return
+    }
+
+    const isCreditExpenseEdit = editingTransaction.type === 'EXPENSE' && editingTransaction.paymentMethod === 'CREDIT_CARD'
+    const nextCardBrand = editSelectedCardBrand
+
+    if (isCreditExpenseEdit && !nextCardBrand) {
+      addToast('Informe o nome do banco/cartao.', 'error')
+      return
+    }
+
+    try {
+      const currentPerson = extractPersonFromDescription(editingTransaction.description)
+      const baseDescription = cleanDescription(editingTransaction.description)
+      const personTag = currentPerson ? ` | Pessoa: ${currentPerson}` : ''
+      const nextDescription = isCreditExpenseEdit
+        ? `${baseDescription} | Cartao: ${nextCardBrand}${personTag}`
+        : `${baseDescription}${personTag}`
+
+      await api.patch(`/dashboard/transactions/${editingTransaction.id}`, {
+        amount: nextAmount,
+        description: nextDescription,
+        dueDate: isCreditExpenseEdit && editForm.dueMonth ? new Date(`${editForm.dueMonth}-01T00:00:00.000Z`).toISOString() : undefined,
+      })
+
+      addToast('Lançamento atualizado com sucesso.', 'success')
+      setEditingTransaction(null)
+      setEditForm({ amount: '', cardBrand: CREDIT_CARD_BRANDS[0], customCardBrand: '', dueMonth: '' })
+      load()
+      triggerDashboardRefresh()
+    } catch (err: any) {
+      addToast(err.response?.data?.error || 'Erro ao atualizar lançamento.', 'error')
+    }
+  }
+
   function renderTransactionItem(tx: Transaction) {
     const isSelected = selectedTransactionIds.includes(tx.id)
 
@@ -357,6 +426,9 @@ export default function TransactionsPage() {
             </p>
             <div className="mt-2 flex items-center justify-end gap-2">
               <PaymentMethodChip meta={getPaymentMethodMeta(tx.paymentMethod)} />
+              <button onClick={() => openEditTransaction(tx)} className="text-slate-500 hover:text-cyan-300 transition-colors">
+                <PencilLine size={16} />
+              </button>
               <button onClick={() => setDeleteConfirm({ open: true, txIds: [tx.id] })} className="text-slate-500 hover:text-red-400 transition-colors">
                 <Trash2 size={16} />
               </button>
@@ -681,6 +753,97 @@ export default function TransactionsPage() {
         onConfirm={handleDeleteConfirm}
         onCancel={() => setDeleteConfirm({ open: false, txIds: [] })}
       />
+
+      {editingTransaction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-3xl border border-cyan-500/20 bg-slate-900 p-6 shadow-[0_18px_60px_rgba(2,8,23,0.6)]">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-white">Editar lançamento</h3>
+                <p className="text-sm text-slate-400">Ajuste valor, cartão/banco e mês da fatura quando for lançamento no crédito.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingTransaction(null)}
+                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditTransaction} className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-slate-400">Valor</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={editForm.amount}
+                  onChange={(e) => setEditForm((p) => ({ ...p, amount: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                  placeholder="0,00"
+                />
+              </div>
+
+              {editingTransaction.type === 'EXPENSE' && editingTransaction.paymentMethod === 'CREDIT_CARD' && (
+                <>
+                  <div>
+                    <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-slate-400">Mês da fatura</label>
+                    <input
+                      type="month"
+                      value={editForm.dueMonth}
+                      onChange={(e) => setEditForm((p) => ({ ...p, dueMonth: e.target.value }))}
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-slate-400">Cartão</label>
+                    <select
+                      value={editForm.cardBrand}
+                      onChange={(e) => setEditForm((p) => ({ ...p, cardBrand: e.target.value }))}
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                    >
+                      {CREDIT_CARD_BRANDS.map((card) => (
+                        <option key={card} value={card}>{card}</option>
+                      ))}
+                      <option value={CUSTOM_CARD_VALUE}>Outro (cadastrar banco/cartão)</option>
+                    </select>
+                  </div>
+
+                  {editForm.cardBrand === CUSTOM_CARD_VALUE && (
+                    <div className="md:col-span-2">
+                      <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-slate-400">Nome do banco/cartão</label>
+                      <input
+                        type="text"
+                        value={editForm.customCardBrand}
+                        onChange={(e) => setEditForm((p) => ({ ...p, customCardBrand: e.target.value }))}
+                        className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                        placeholder="Ex: XP, C6, Inter..."
+                      />
+                    </div>
+                  )}
+                </>
+              )}
+
+              <div className="md:col-span-2 flex flex-wrap gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-cyan-300"
+                >
+                  Salvar alterações
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingTransaction(null)}
+                  className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:bg-slate-800"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
       </div>
     </div>
   )
