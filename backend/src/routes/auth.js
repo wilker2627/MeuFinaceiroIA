@@ -96,6 +96,45 @@ authRouter.post('/login', async (req, res) => {
   }
 })
 
+// POST /api/auth/enterprise-login
+authRouter.post('/enterprise-login', async (req, res) => {
+  try {
+    const email = normalizeEmail(req.body?.email)
+    const { password } = req.body
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'E-mail e senha sao obrigatorios.' })
+    }
+
+    const tenant = await prisma.tenant.findUnique({ where: { email } })
+
+    if (!tenant || !tenant.isActive) {
+      return res.status(401).json({ error: 'Credenciais invalidas.' })
+    }
+
+    if (String(tenant.plan || '').toUpperCase() !== 'EMPRESA') {
+      return res.status(403).json({ error: 'Conta sem acesso ao login empresarial.' })
+    }
+
+    if (!tenant.passwordHash || typeof tenant.passwordHash !== 'string') {
+      return res.status(401).json({ error: 'Conta sem senha configurada. Use redefinicao de senha.' })
+    }
+
+    const valid = await bcrypt.compare(password, tenant.passwordHash)
+    if (!valid) {
+      return res.status(401).json({ error: 'Credenciais invalidas.' })
+    }
+
+    const token = generateToken(tenant)
+    const { passwordHash: _, ...tenantData } = tenant
+
+    res.json({ tenant: tenantData, token })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ error: 'Erro ao fazer login empresarial.' })
+  }
+})
+
 // POST /api/auth/password-reset-local
 authRouter.post('/password-reset-local', async (req, res) => {
   try {

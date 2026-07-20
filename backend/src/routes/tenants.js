@@ -6,6 +6,8 @@ import { addDays } from 'date-fns'
 
 export const tenantsRouter = Router()
 
+const BUSINESS_PROFILE_EVENT = 'BUSINESS_PROFILE_SAVED'
+
 function isStrongPassword(password = '') {
   const value = String(password)
   return value.length >= 8
@@ -98,5 +100,93 @@ tenantsRouter.post('/family-invites', async (req, res) => {
     token: invite.token,
     inviteLink: `${base}/invite/${invite.token}`,
     expiresAt: invite.expiresAt
+  })
+})
+
+// GET /api/tenants/business-profile
+tenantsRouter.get('/business-profile', async (req, res) => {
+  const tenant = await prisma.tenant.findUnique({ where: { id: req.tenant.id } })
+  if (!tenant) {
+    return res.status(404).json({ error: 'Conta nao encontrada.' })
+  }
+
+  const latestProfileEvent = await prisma.onboardingEvent.findFirst({
+    where: {
+      email: tenant.email,
+      eventType: BUSINESS_PROFILE_EVENT
+    },
+    orderBy: { createdAt: 'desc' }
+  })
+
+  let profile = {
+    cnpj: '',
+    businessName: '',
+    logoUrl: '',
+    completed: false,
+    updatedAt: null
+  }
+
+  if (latestProfileEvent?.metadata) {
+    try {
+      const parsed = JSON.parse(latestProfileEvent.metadata)
+      profile = {
+        cnpj: String(parsed?.cnpj || ''),
+        businessName: String(parsed?.businessName || ''),
+        logoUrl: String(parsed?.logoUrl || ''),
+        completed: true,
+        updatedAt: latestProfileEvent.createdAt
+      }
+    } catch {
+      // Ignore malformed historical metadata.
+    }
+  }
+
+  return res.json(profile)
+})
+
+// PUT /api/tenants/business-profile
+tenantsRouter.put('/business-profile', async (req, res) => {
+  const tenant = await prisma.tenant.findUnique({ where: { id: req.tenant.id } })
+  if (!tenant) {
+    return res.status(404).json({ error: 'Conta nao encontrada.' })
+  }
+
+  if (String(tenant.plan || '').toUpperCase() !== 'EMPRESA') {
+    return res.status(403).json({ error: 'Perfil empresarial disponivel apenas para plano EMPRESA.' })
+  }
+
+  const cnpjRaw = String(req.body?.cnpj || '').trim()
+  const businessName = String(req.body?.businessName || '').trim()
+  const logoUrl = String(req.body?.logoUrl || '').trim()
+  const cnpjDigits = cnpjRaw.replace(/\D/g, '')
+
+  if (cnpjDigits.length !== 14) {
+    return res.status(400).json({ error: 'CNPJ deve conter 14 digitos.' })
+  }
+
+  if (!businessName) {
+    return res.status(400).json({ error: 'Nome da empresa obrigatorio.' })
+  }
+
+  await prisma.onboardingEvent.create({
+    data: {
+      checkoutId: null,
+      email: tenant.email,
+      eventType: BUSINESS_PROFILE_EVENT,
+      metadata: JSON.stringify({
+        tenantId: tenant.id,
+        cnpj: cnpjDigits,
+        businessName,
+        logoUrl
+      })
+    }
+  })
+
+  return res.json({
+    cnpj: cnpjDigits,
+    businessName,
+    logoUrl,
+    completed: true,
+    updatedAt: new Date().toISOString()
   })
 })

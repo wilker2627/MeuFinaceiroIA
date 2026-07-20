@@ -39,7 +39,7 @@ api.interceptors.response.use(
       }
 
       const currentPath = window.location.pathname || ''
-      const authPages = ['/login', '/register', '/admin/login']
+      const authPages = ['/login', '/enterprise-login', '/register', '/admin/login']
       const isAuthPage = authPages.some((path) => currentPath === path || currentPath.startsWith(`${path}/`))
 
       if (!isAuthPage) {

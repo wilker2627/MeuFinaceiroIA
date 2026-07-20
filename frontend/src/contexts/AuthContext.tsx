@@ -15,6 +15,7 @@ interface AuthContextType {
   tenant: Tenant | null
   token: string | null
   login: (email: string, password: string) => Promise<void>
+  enterpriseLogin: (email: string, password: string) => Promise<void>
   register: (name: string, email: string, password: string) => Promise<void>
   logout: () => void
   loading: boolean
@@ -79,6 +80,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     router.push('/dashboard')
   }
 
+  async function enterpriseLogin(email: string, password: string) {
+    const normalizedEmail = String(email || '').trim().toLowerCase()
+    const { data } = await api.post('/auth/enterprise-login', { email: normalizedEmail, password })
+    safeStorageSet('token', data.token)
+    safeStorageSet('tenant', JSON.stringify(data.tenant))
+    setToken(data.token)
+    setTenant(data.tenant)
+    router.push('/dashboard')
+  }
+
   async function register(name: string, email: string, password: string) {
     const normalizedEmail = String(email || '').trim().toLowerCase()
     const { data } = await api.post('/auth/register', { name, email: normalizedEmail, password })
@@ -98,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ tenant, token, login, register, logout, loading }}>
+    <AuthContext.Provider value={{ tenant, token, login, enterpriseLogin, register, logout, loading }}>
       {children}
     </AuthContext.Provider>
   )

@@ -267,6 +267,11 @@ export default function LoginPage() {
             </Link>
           </p>
           <p className="text-slate-500 text-xs">
+            <Link href="/enterprise-login" className="text-emerald-300 hover:text-emerald-200 transition">
+              Login Empresa
+            </Link>
+          </p>
+          <p className="text-slate-500 text-xs">
             <Link href="/admin/login" className="text-slate-400 hover:text-slate-300 transition">
               Admin?
             </Link>
