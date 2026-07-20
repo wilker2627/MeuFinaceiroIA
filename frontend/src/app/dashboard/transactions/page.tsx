@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import api from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
@@ -204,6 +204,14 @@ export default function TransactionsPage() {
   }, [editingTransaction, editSelectedCardBrand, isEditingCreditExpense])
   const allVisibleSelected = transactions.length > 0 && transactions.every((tx) => selectedTransactionIds.includes(tx.id))
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const [scannerLoading, setScannerLoading] = useState(false)
+  const [scannerMessage, setScannerMessage] = useState('Posicione o QR Code ou codigo de barras dentro da camera.')
+  const [scannerError, setScannerError] = useState('')
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const scanTimerRef = useRef<number | null>(null)
+  const barcodeDetectorRef = useRef<any>(null)
 
   const getResponsibleName = (tx: Transaction) => tx.user?.name || tx.from?.name || tx.to?.name || extractPersonFromDescription(tx.description) || 'Sem responsavel'
 
@@ -286,6 +294,146 @@ export default function TransactionsPage() {
       return next
     })
   }, [groupedTransactions])
+
+  useEffect(() => {
+    return () => {
+      stopScanner()
+    }
+  }, [])
+
+  function stopScanner() {
+    if (scanTimerRef.current !== null) {
+      window.clearTimeout(scanTimerRef.current)
+      scanTimerRef.current = null
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
+      streamRef.current = null
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+  }
+
+  function isLikelyPixPayload(value: string) {
+    const normalized = String(value || '').trim().toUpperCase()
+    return normalized.startsWith('000201') || normalized.includes('BR.GOV.BCB.PIX')
+  }
+
+  function applyScannedCode(rawValue: string) {
+    const scanned = String(rawValue || '').trim()
+    const digits = scanned.replace(/\D/g, '')
+    const isBarcode = digits.length === 44 || digits.length === 47
+
+    if (isBarcode) {
+      const parsed = parsePaymentCode(digits)
+      setForm((prev) => ({
+        ...prev,
+        businessDocCode: parsed.normalizedCode || digits,
+        amount: parsed.amount ? String(parsed.amount.toFixed(2)) : prev.amount,
+        businessDueDate: parsed.dueDate || prev.businessDueDate,
+      }))
+      addToast('Codigo de barras lido com sucesso.', 'success')
+      return
+    }
+
+    if (isLikelyPixPayload(scanned)) {
+      setForm((prev) => ({
+        ...prev,
+        businessPixCopy: scanned,
+        paymentMethod: 'PIX'
+      }))
+      addToast('QR/Pix lido com sucesso.', 'success')
+      return
+    }
+
+    if (digits.length >= 30) {
+      const parsed = parsePaymentCode(digits)
+      setForm((prev) => ({
+        ...prev,
+        businessDocCode: parsed.normalizedCode || digits,
+        amount: parsed.amount ? String(parsed.amount.toFixed(2)) : prev.amount,
+        businessDueDate: parsed.dueDate || prev.businessDueDate,
+      }))
+      addToast('Leitura realizada. Revise os dados antes de salvar.', 'success')
+      return
+    }
+
+    setForm((prev) => ({ ...prev, businessPixCopy: scanned, paymentMethod: 'PIX' }))
+    addToast('Leitura realizada. Conteudo aplicado no campo Pix.', 'success')
+  }
+
+  async function openCameraScanner() {
+    setScannerOpen(true)
+    setScannerLoading(true)
+    setScannerError('')
+    setScannerMessage('Posicione o QR Code ou codigo de barras dentro da camera.')
+
+    try {
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        throw new Error('Este dispositivo nao suporta acesso a camera.')
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' }
+        },
+        audio: false
+      })
+
+      streamRef.current = stream
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+      }
+
+      const BarcodeDetectorCtor = (window as any).BarcodeDetector
+      if (!BarcodeDetectorCtor) {
+        throw new Error('Leitor de camera indisponivel neste navegador. Cole o codigo manualmente.')
+      }
+
+      barcodeDetectorRef.current = new BarcodeDetectorCtor({
+        formats: ['qr_code', 'code_128', 'code_39', 'ean_13', 'ean_8', 'itf']
+      })
+
+      const detectLoop = async () => {
+        if (!scannerOpen) return
+
+        try {
+          const videoEl = videoRef.current
+          if (videoEl && videoEl.readyState >= 2 && barcodeDetectorRef.current) {
+            const results = await barcodeDetectorRef.current.detect(videoEl)
+            if (Array.isArray(results) && results.length > 0) {
+              const rawValue = String(results[0]?.rawValue || '').trim()
+              if (rawValue) {
+                applyScannedCode(rawValue)
+                setScannerOpen(false)
+                stopScanner()
+                return
+              }
+            }
+          }
+        } catch {
+          // Keep scanning when transient camera frames fail.
+        }
+
+        scanTimerRef.current = window.setTimeout(detectLoop, 280)
+      }
+
+      setScannerLoading(false)
+      detectLoop()
+    } catch (err: any) {
+      setScannerLoading(false)
+      setScannerError(err?.message || 'Nao foi possivel abrir a camera.')
+      stopScanner()
+    }
+  }
+
+  function closeCameraScanner() {
+    setScannerOpen(false)
+    stopScanner()
+  }
 
   async function load() {
     setLoading(true)
@@ -814,6 +962,15 @@ export default function TransactionsPage() {
                   Ler codigo/QR e preencher
                 </button>
               </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={openCameraScanner}
+                  className="w-full rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-3 py-2 text-sm font-semibold text-cyan-200 hover:bg-cyan-500/20"
+                >
+                  Ler com camera
+                </button>
+              </div>
             </>
           )}
           <div className="flex items-end gap-2">
@@ -824,6 +981,34 @@ export default function TransactionsPage() {
             <button type="button" onClick={() => { setShowForm(false); setFormErrors({}) }} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg transition-colors">Cancelar</button>
           </div>
         </form>
+      )}
+
+      {scannerOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/85 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-3xl border border-cyan-500/25 bg-slate-900 p-5 shadow-[0_20px_60px_rgba(2,8,23,0.65)]">
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.18em] text-cyan-300/80">Leitura por camera</p>
+                <h3 className="text-lg font-bold text-white">Escanear QR Code ou codigo de barras</h3>
+              </div>
+              <button
+                type="button"
+                onClick={closeCameraScanner}
+                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-slate-700 bg-black/60 p-2">
+              <video ref={videoRef} className="h-72 w-full rounded-xl bg-black object-cover" muted playsInline autoPlay />
+            </div>
+
+            <p className="mt-3 text-sm text-slate-300">{scannerMessage}</p>
+            {scannerLoading && <p className="mt-1 text-xs text-cyan-300">Inicializando camera...</p>}
+            {scannerError && <p className="mt-1 text-xs text-rose-300">{scannerError}</p>}
+          </div>
+        </div>
       )}
 
       {isBusinessPlan && (
