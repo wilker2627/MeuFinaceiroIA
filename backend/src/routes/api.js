@@ -183,7 +183,7 @@ apiRouter.get('/evolution', async (req, res) => {
 // ===========================
 // GET /api/dashboard/transactions
 apiRouter.get('/transactions', async (req, res) => {
-  const { page = 1, limit = 50, type, month, search, paymentMethod, monthField } = req.query
+  const { page = 1, limit = 50, type, month, search, paymentMethod, monthField, status } = req.query
   const skip = (parseInt(page) - 1) * parseInt(limit)
 
   const where = { tenantId: req.tenant.id }
@@ -207,6 +207,16 @@ apiRouter.get('/transactions', async (req, res) => {
     where.description = { contains: search, mode: 'insensitive' }
   }
   if (paymentMethod) where.paymentMethod = paymentMethod
+  if (status === 'PAID') {
+    where.isPaid = true
+  } else if (status === 'PENDING') {
+    where.type = 'EXPENSE'
+    where.isPaid = false
+  } else if (status === 'OVERDUE') {
+    where.type = 'EXPENSE'
+    where.isPaid = false
+    where.dueDate = { lt: startOfDay(new Date()) }
+  }
 
   const [transactions, total] = await Promise.all([
     prisma.transaction.findMany({

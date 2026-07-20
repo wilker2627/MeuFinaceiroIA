@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import api from '@/lib/api'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
+import { useAuth } from '@/contexts/AuthContext'
 import { Plus, Trash2, Search, CreditCard, Wallet, QrCode, Loader, ChevronDown, ChevronRight, PencilLine } from 'lucide-react'
 import ConfirmModal from '@/components/ConfirmModal'
 import EmptyState, { LoadingSkeleton } from '@/components/EmptyState'
@@ -59,6 +60,8 @@ const getPaymentMethodMeta = (method?: string) => PAYMENT_METHOD_META[method || 
 
 const CARD_TAG_REGEX = /\|\s*Cartao:\s*([^|]+)/i
 const PERSON_TAG_REGEX = /\|\s*Pessoa:\s*(.+)$/i
+const DOC_CODE_TAG_REGEX = /\|\s*DocCode:\s*([^|]+)/i
+const PIX_COPY_TAG_REGEX = /\|\s*Pix:\s*([^|]+)/i
 
 function extractCardBrandFromDescription(description: string) {
   const match = String(description || '').match(CARD_TAG_REGEX)
@@ -74,7 +77,53 @@ function cleanDescription(description: string) {
   return String(description || '')
     .replace(CARD_TAG_REGEX, '')
     .replace(PERSON_TAG_REGEX, '')
+    .replace(DOC_CODE_TAG_REGEX, '')
+    .replace(PIX_COPY_TAG_REGEX, '')
     .trim()
+}
+
+function stripCardAndPersonTags(description: string) {
+  return String(description || '')
+    .replace(CARD_TAG_REGEX, '')
+    .replace(PERSON_TAG_REGEX, '')
+    .trim()
+}
+
+function extractDocumentCodeFromDescription(description: string) {
+  const match = String(description || '').match(DOC_CODE_TAG_REGEX)
+  return match?.[1]?.trim() || ''
+}
+
+function extractPixCopyFromDescription(description: string) {
+  const match = String(description || '').match(PIX_COPY_TAG_REGEX)
+  return match?.[1]?.trim() || ''
+}
+
+function parsePaymentCode(rawCode: string): { amount?: number; dueDate?: string; normalizedCode?: string } {
+  const digits = String(rawCode || '').replace(/\D/g, '')
+  if (!digits) return {}
+
+  let barcode = ''
+  if (digits.length === 44) {
+    barcode = digits
+  } else if (digits.length === 47) {
+    barcode = `${digits.slice(0, 4)}${digits.slice(32, 33)}${digits.slice(33, 47)}${digits.slice(4, 9)}${digits.slice(10, 20)}${digits.slice(21, 31)}`
+  } else {
+    return { normalizedCode: digits }
+  }
+
+  const factor = Number(barcode.slice(5, 9))
+  const amountCents = Number(barcode.slice(9, 19))
+
+  let dueDate: string | undefined
+  if (Number.isFinite(factor) && factor > 0) {
+    const baseDate = new Date('1997-10-07T00:00:00.000Z')
+    const due = new Date(baseDate.getTime() + factor * 24 * 60 * 60 * 1000)
+    dueDate = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`
+  }
+
+  const amount = Number.isFinite(amountCents) && amountCents > 0 ? amountCents / 100 : undefined
+  return { amount, dueDate, normalizedCode: barcode }
 }
 
 function getInvoiceMonthKey(tx: Transaction) {
@@ -89,14 +138,16 @@ function formatInvoiceMonth(monthKey: string) {
 }
 
 export default function TransactionsPage() {
+  const { tenant } = useAuth()
   const { addToast } = useToast()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('')
+  const [businessStatusFilter, setBusinessStatusFilter] = useState('')
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState<{ type: string; amount: string; description: string; categoryId: string; paymentMethod: string; personName: string; installments: string; creditBillingOption: string; cardBrand: string; customCardBrand: string }>({
+  const [form, setForm] = useState<{ type: string; amount: string; description: string; categoryId: string; paymentMethod: string; personName: string; installments: string; creditBillingOption: string; cardBrand: string; customCardBrand: string; businessDueDate: string; businessDocCode: string; businessPixCopy: string }>({
     type: 'EXPENSE',
     amount: '',
     description: '',
@@ -106,7 +157,10 @@ export default function TransactionsPage() {
     installments: '1',
     creditBillingOption: '1',
     cardBrand: CREDIT_CARD_BRANDS[0],
-    customCardBrand: ''
+    customCardBrand: '',
+    businessDueDate: '',
+    businessDocCode: '',
+    businessPixCopy: ''
   })
   const [formErrors, setFormErrors] = useState<Record<string, string>>({})
   const [categories, setCategories] = useState<any[]>([])
@@ -124,6 +178,8 @@ export default function TransactionsPage() {
   })
   const panelClass = 'dashboard-panel rounded-2xl border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.45)]'
   const selectedFormPayment = getPaymentMethodMeta(form.paymentMethod)
+  const isBusinessPlan = String(tenant?.plan || '').toUpperCase() === 'EMPRESA'
+  const isBusinessExpense = isBusinessPlan && form.type === 'EXPENSE'
   const selectedFilterPayment = paymentMethodFilter ? getPaymentMethodMeta(paymentMethodFilter) : null
   const isCreditExpense = form.type === 'EXPENSE' && form.paymentMethod === 'CREDIT_CARD'
   const selectedCardBrand = form.cardBrand === CUSTOM_CARD_VALUE
@@ -136,7 +192,7 @@ export default function TransactionsPage() {
   const editPreviewDescription = useMemo(() => {
     if (!editingTransaction) return ''
     const currentPerson = extractPersonFromDescription(editingTransaction.description)
-    const baseDescription = cleanDescription(editingTransaction.description)
+    const baseDescription = stripCardAndPersonTags(editingTransaction.description)
     const personTag = currentPerson ? ` | Pessoa: ${currentPerson}` : ''
 
     if (isEditingCreditExpense) {
@@ -237,6 +293,7 @@ export default function TransactionsPage() {
     if (search) params.set('search', search)
     if (typeFilter) params.set('type', typeFilter)
     if (paymentMethodFilter) params.set('paymentMethod', paymentMethodFilter)
+    if (isBusinessPlan && businessStatusFilter) params.set('status', businessStatusFilter)
     const [t, c, a] = await Promise.all([
       api.get(`/dashboard/transactions?${params}`),
       api.get('/dashboard/categories?catalog=1'),
@@ -250,7 +307,65 @@ export default function TransactionsPage() {
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [search, typeFilter, paymentMethodFilter])
+  useEffect(() => { load() }, [search, typeFilter, paymentMethodFilter, businessStatusFilter, isBusinessPlan])
+
+  const businessExpenseSummary = useMemo(() => {
+    const expenses = transactions.filter((tx) => tx.type === 'EXPENSE')
+    const now = new Date()
+    const pending = expenses.filter((tx) => tx.isPaid === false)
+    const overdue = pending.filter((tx) => tx.dueDate && new Date(tx.dueDate) < now)
+    const paid = expenses.filter((tx) => tx.isPaid === true)
+
+    return {
+      pendingCount: pending.length,
+      pendingAmount: pending.reduce((sum, tx) => sum + Number(tx.amount || 0), 0),
+      overdueCount: overdue.length,
+      overdueAmount: overdue.reduce((sum, tx) => sum + Number(tx.amount || 0), 0),
+      paidCount: paid.length,
+      paidAmount: paid.reduce((sum, tx) => sum + Number(tx.amount || 0), 0),
+    }
+  }, [transactions])
+
+  function handleParseBusinessCode() {
+    const parsed = parsePaymentCode(form.businessDocCode || form.businessPixCopy)
+
+    setForm((prev) => ({
+      ...prev,
+      amount: parsed.amount ? String(parsed.amount.toFixed(2)) : prev.amount,
+      businessDueDate: parsed.dueDate || prev.businessDueDate,
+      businessDocCode: parsed.normalizedCode || prev.businessDocCode,
+      paymentMethod: prev.paymentMethod || 'PIX',
+    }))
+
+    if (parsed.amount || parsed.dueDate) {
+      addToast('Dados identificados e preenchidos automaticamente quando disponiveis.', 'success')
+    } else {
+      addToast('Nao foi possivel identificar valor/vencimento automaticamente. Complete manualmente.', 'warning')
+    }
+  }
+
+  async function handleTogglePaid(tx: Transaction) {
+    try {
+      await api.patch(`/dashboard/transactions/${tx.id}`, {
+        isPaid: !Boolean(tx.isPaid)
+      })
+      addToast(tx.isPaid ? 'Despesa marcada como pendente.' : 'Despesa marcada como paga.', 'success')
+      load()
+      triggerDashboardRefresh()
+    } catch (err: any) {
+      addToast(err.response?.data?.error || 'Erro ao atualizar status do pagamento.', 'error')
+    }
+  }
+
+  async function copyText(value: string, successMessage: string) {
+    if (!value) return
+    try {
+      await navigator.clipboard.writeText(value)
+      addToast(successMessage, 'success')
+    } catch {
+      addToast('Nao foi possivel copiar automaticamente neste navegador.', 'warning')
+    }
+  }
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault()
@@ -281,8 +396,16 @@ export default function TransactionsPage() {
       const baseAmount = Number(form.amount)
       const cardTag = isCreditExpense ? ` | Cartao: ${selectedCardBrand}` : ''
       const personTag = form.personName.trim() ? ` | Pessoa: ${form.personName.trim()}` : ''
-      const baseDescription = `${form.description}${cardTag}${personTag}`
+      const documentCode = isBusinessExpense ? form.businessDocCode.trim() : ''
+      const pixCopyPaste = isBusinessExpense ? form.businessPixCopy.trim() : ''
+      const docTag = documentCode ? ` | DocCode: ${documentCode}` : ''
+      const pixTag = pixCopyPaste ? ` | Pix: ${pixCopyPaste}` : ''
+      const baseDescription = `${form.description}${cardTag}${personTag}${docTag}${pixTag}`
       const currentBillDate = isCreditExpense && form.creditBillingOption === 'CURRENT_BILL' ? new Date() : undefined
+      const enterpriseDueDate = isBusinessExpense && form.businessDueDate
+        ? new Date(`${form.businessDueDate}T00:00:00.000Z`)
+        : undefined
+      const shouldStartAsPending = isBusinessExpense
 
       await api.post('/dashboard/transactions', {
         type: form.type,
@@ -293,14 +416,14 @@ export default function TransactionsPage() {
         accountId: isCreditExpense ? undefined : (accounts[0]?.id || undefined),
         personName: form.personName.trim() || undefined,
         installments,
-        isPaid: isCreditExpense ? false : true,
-        dueDate: currentBillDate ? currentBillDate.toISOString() : undefined,
+        isPaid: shouldStartAsPending ? false : (isCreditExpense ? false : true),
+        dueDate: enterpriseDueDate ? enterpriseDueDate.toISOString() : (currentBillDate ? currentBillDate.toISOString() : undefined),
         date: currentBillDate ? currentBillDate.toISOString() : undefined,
       })
 
       addToast(`${form.type === 'EXPENSE' ? 'Despesa' : 'Entrada'} registrada com sucesso!`, 'success')
       setShowForm(false)
-      setForm({ type: 'EXPENSE', amount: '', description: '', categoryId: '', paymentMethod: 'CASH', personName: '', installments: '1', creditBillingOption: '1', cardBrand: CREDIT_CARD_BRANDS[0], customCardBrand: '' })
+      setForm({ type: 'EXPENSE', amount: '', description: '', categoryId: '', paymentMethod: 'CASH', personName: '', installments: '1', creditBillingOption: '1', cardBrand: CREDIT_CARD_BRANDS[0], customCardBrand: '', businessDueDate: '', businessDocCode: '', businessPixCopy: '' })
       load()
       triggerDashboardRefresh()
     } catch (err: any) {
@@ -385,7 +508,7 @@ export default function TransactionsPage() {
 
     try {
       const currentPerson = extractPersonFromDescription(editingTransaction.description)
-      const baseDescription = cleanDescription(editingTransaction.description)
+      const baseDescription = stripCardAndPersonTags(editingTransaction.description)
       const personTag = currentPerson ? ` | Pessoa: ${currentPerson}` : ''
       const nextDescription = isCreditExpenseEdit
         ? `${baseDescription} | Cartao: ${nextCardBrand}${personTag}`
@@ -409,6 +532,16 @@ export default function TransactionsPage() {
 
   function renderTransactionItem(tx: Transaction) {
     const isSelected = selectedTransactionIds.includes(tx.id)
+    const isBusinessExpenseItem = isBusinessPlan && tx.type === 'EXPENSE'
+    const isOverdue = isBusinessExpenseItem && tx.isPaid === false && tx.dueDate ? new Date(tx.dueDate) < new Date() : false
+    const paymentStatusLabel = tx.isPaid ? 'Pago' : (isOverdue ? 'Vencido' : 'Pendente')
+    const paymentStatusClass = tx.isPaid
+      ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+      : isOverdue
+        ? 'border-rose-500/30 bg-rose-500/10 text-rose-300'
+        : 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+    const documentCode = extractDocumentCodeFromDescription(tx.description)
+    const pixCopy = extractPixCopyFromDescription(tx.description)
 
     return (
       <div key={tx.id} className="rounded-xl border border-cyan-500/10 bg-slate-950/70 p-4">
@@ -429,9 +562,32 @@ export default function TransactionsPage() {
                   <span>{tx.installmentNumber || 1}/{tx.installments}</span>
                 )}
                 {tx.type === 'EXPENSE' && tx.isPaid === false && tx.dueDate && (
-                  <span className="text-amber-300">Acumula para {formatDate(tx.dueDate)}</span>
+                  <span className="text-amber-300">Vence em {formatDate(tx.dueDate)}</span>
                 )}
               </div>
+              {isBusinessExpenseItem && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className={`rounded-full border px-2 py-0.5 text-[11px] ${paymentStatusClass}`}>{paymentStatusLabel}</span>
+                  {documentCode && (
+                    <button
+                      type="button"
+                      onClick={() => copyText(documentCode, 'Codigo de barras copiado.')}
+                      className="rounded-full border border-slate-600 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-300 hover:border-cyan-400 hover:text-cyan-200"
+                    >
+                      Copiar codigo
+                    </button>
+                  )}
+                  {pixCopy && (
+                    <button
+                      type="button"
+                      onClick={() => copyText(pixCopy, 'Pix copia e cola copiado.')}
+                      className="rounded-full border border-slate-600 bg-slate-900 px-2 py-0.5 text-[11px] text-slate-300 hover:border-cyan-400 hover:text-cyan-200"
+                    >
+                      Copiar Pix
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
           <div className="text-right">
@@ -443,6 +599,15 @@ export default function TransactionsPage() {
               <button onClick={() => openEditTransaction(tx)} className="text-slate-500 hover:text-cyan-300 transition-colors">
                 <PencilLine size={16} />
               </button>
+              {isBusinessExpenseItem && (
+                <button
+                  type="button"
+                  onClick={() => handleTogglePaid(tx)}
+                  className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${tx.isPaid ? 'border-amber-500/35 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20' : 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20'}`}
+                >
+                  {tx.isPaid ? 'Marcar pendente' : 'Marcar pago'}
+                </button>
+              )}
               <button onClick={() => setDeleteConfirm({ open: true, txIds: [tx.id] })} className="text-slate-500 hover:text-red-400 transition-colors">
                 <Trash2 size={16} />
               </button>
@@ -609,6 +774,48 @@ export default function TransactionsPage() {
               </select>
             </div>
           )}
+          {isBusinessExpense && (
+            <>
+              <div className="col-span-2 md:col-span-3">
+                <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Codigo de barras / linha digitavel</label>
+                <input
+                  type="text"
+                  value={form.businessDocCode}
+                  onChange={e => setForm(p => ({ ...p, businessDocCode: e.target.value }))}
+                  className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2"
+                  placeholder="Cole o codigo do boleto"
+                />
+              </div>
+              <div className="col-span-2 md:col-span-3">
+                <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Pix copia e cola / payload QR</label>
+                <input
+                  type="text"
+                  value={form.businessPixCopy}
+                  onChange={e => setForm(p => ({ ...p, businessPixCopy: e.target.value }))}
+                  className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2"
+                  placeholder="Cole o Pix copia e cola"
+                />
+              </div>
+              <div>
+                <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Vencimento</label>
+                <input
+                  type="date"
+                  value={form.businessDueDate}
+                  onChange={e => setForm(p => ({ ...p, businessDueDate: e.target.value }))}
+                  className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2"
+                />
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={handleParseBusinessCode}
+                  className="w-full rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-200 hover:bg-emerald-500/20"
+                >
+                  Ler codigo/QR e preencher
+                </button>
+              </div>
+            </>
+          )}
           <div className="flex items-end gap-2">
             <button type="submit" disabled={saving} className="bg-cyan-400 hover:bg-cyan-300 disabled:opacity-60 text-slate-950 font-semibold px-4 py-2 rounded-lg flex items-center gap-2">
               {saving && <Loader size={16} className="animate-spin" />}
@@ -617,6 +824,26 @@ export default function TransactionsPage() {
             <button type="button" onClick={() => { setShowForm(false); setFormErrors({}) }} className="bg-slate-800 hover:bg-slate-700 text-white px-4 py-2 rounded-lg transition-colors">Cancelar</button>
           </div>
         </form>
+      )}
+
+      {isBusinessPlan && (
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-amber-200/80">A pagar</p>
+            <p className="mt-1 text-xl font-black text-amber-100">{businessExpenseSummary.pendingCount}</p>
+            <p className="text-xs text-amber-200/80">{formatCurrency(businessExpenseSummary.pendingAmount)}</p>
+          </div>
+          <div className="rounded-xl border border-rose-500/25 bg-rose-500/10 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-rose-200/80">Vencidas</p>
+            <p className="mt-1 text-xl font-black text-rose-100">{businessExpenseSummary.overdueCount}</p>
+            <p className="text-xs text-rose-200/80">{formatCurrency(businessExpenseSummary.overdueAmount)}</p>
+          </div>
+          <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-emerald-200/80">Pagas</p>
+            <p className="mt-1 text-xl font-black text-emerald-100">{businessExpenseSummary.paidCount}</p>
+            <p className="text-xs text-emerald-200/80">{formatCurrency(businessExpenseSummary.paidAmount)}</p>
+          </div>
+        </div>
       )}
 
       {/* Filtros */}
@@ -640,6 +867,15 @@ export default function TransactionsPage() {
             <option key={method.value} value={method.value}>{method.label}</option>
           ))}
         </select>
+        {isBusinessPlan && (
+          <select value={businessStatusFilter} onChange={e => setBusinessStatusFilter(e.target.value)}
+            className="bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2 text-sm">
+            <option value="">Todos os status</option>
+            <option value="PENDING">A pagar</option>
+            <option value="OVERDUE">Vencidas</option>
+            <option value="PAID">Pagas</option>
+          </select>
+        )}
         {selectedFilterPayment && <PaymentMethodChip meta={selectedFilterPayment} />}
         <ExportData
           data={transactions}
