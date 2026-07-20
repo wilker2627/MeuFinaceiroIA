@@ -36,6 +36,8 @@ const CREDIT_CARD_BRANDS = [
   'SANTANDER',
 ] as const
 
+const CUSTOM_CARD_VALUE = '__CUSTOM__'
+
 const CARD_TAG_REGEX = /\|\s*Cartao:\s*([^|]+)/i
 const PERSON_TAG_REGEX = /\|\s*Pessoa:\s*(.+)$/i
 
@@ -84,16 +86,20 @@ export default function BillsPage() {
   const [accounts, setAccounts] = useState<any[]>([])
   const [paying, setPaying] = useState(false)
   const [selectedAccountId, setSelectedAccountId] = useState('')
-  const [form, setForm] = useState<{ description: string; amount: string; cardBrand: string; dueMonth: string; personName: string; installments: string }>({
+  const [form, setForm] = useState<{ description: string; amount: string; cardBrand: string; customCardBrand: string; dueMonth: string; personName: string; installments: string }>({
     description: '',
     amount: '',
     cardBrand: CREDIT_CARD_BRANDS[0],
+    customCardBrand: '',
     dueMonth: '',
     personName: '',
     installments: '1'
   })
 
   const currentMonthKey = useMemo(() => monthKeyFromDate(new Date()), [])
+  const selectedCardBrand = form.cardBrand === CUSTOM_CARD_VALUE
+    ? form.customCardBrand.trim().toUpperCase()
+    : form.cardBrand
 
   async function loadBills() {
     setLoading(true)
@@ -149,11 +155,16 @@ export default function BillsPage() {
       return
     }
 
+    if (!selectedCardBrand) {
+      addToast('Informe o nome do banco/cartao.', 'error')
+      return
+    }
+
     setSaving(true)
     try {
       const dueDate = new Date(startOfMonthKey(form.dueMonth))
       const personTag = form.personName.trim() ? ` | Pessoa: ${form.personName.trim()}` : ''
-      const descriptionWithCard = `${form.description} | Cartao: ${form.cardBrand}${personTag}`
+      const descriptionWithCard = `${form.description} | Cartao: ${selectedCardBrand}${personTag}`
       if (entryMode === 'INSTALLMENT_PURCHASE') {
         const installments = Math.min(Math.max(parseInt(form.installments) || 1, 1), 12)
         await api.post('/dashboard/transactions', {
@@ -180,7 +191,7 @@ export default function BillsPage() {
       }
 
       addToast('Fatura incluida com sucesso!', 'success')
-      setForm({ description: '', amount: '', cardBrand: CREDIT_CARD_BRANDS[0], dueMonth: '', personName: '', installments: '1' })
+      setForm({ description: '', amount: '', cardBrand: CREDIT_CARD_BRANDS[0], customCardBrand: '', dueMonth: '', personName: '', installments: '1' })
       await loadBills()
       triggerDashboardRefresh()
     } catch (error: any) {
@@ -325,8 +336,20 @@ export default function BillsPage() {
                 {CREDIT_CARD_BRANDS.map((card) => (
                   <option key={card} value={card}>{card}</option>
                 ))}
+                <option value={CUSTOM_CARD_VALUE}>Outro (cadastrar banco/cartão)</option>
               </select>
             </div>
+            {form.cardBrand === CUSTOM_CARD_VALUE && (
+              <div className="sm:col-span-2">
+                <label className="text-xs text-slate-500 block mb-1">Nome do banco/cartão</label>
+                <input
+                  value={form.customCardBrand}
+                  onChange={(e) => setForm((p) => ({ ...p, customCardBrand: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                  placeholder="Ex: XP, C6, Inter..."
+                />
+              </div>
+            )}
             <div>
               <label className="text-xs text-slate-500 block mb-1">Valor</label>
               <input type="number" step="0.01" value={form.amount} onChange={(e) => setForm((p) => ({ ...p, amount: e.target.value }))} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" placeholder="0,00" />
