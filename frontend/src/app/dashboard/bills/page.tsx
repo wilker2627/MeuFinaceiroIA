@@ -76,6 +76,11 @@ function extractCardBrandFromDescription(description: string) {
   return match?.[1]?.trim() || 'Sem cartao'
 }
 
+function extractPersonFromDescription(description: string) {
+  const match = String(description || '').match(PERSON_TAG_REGEX)
+  return match?.[1]?.trim() || ''
+}
+
 export default function BillsPage() {
   const { addToast } = useToast()
   const [loading, setLoading] = useState(true)
@@ -86,6 +91,12 @@ export default function BillsPage() {
   const [accounts, setAccounts] = useState<any[]>([])
   const [paying, setPaying] = useState(false)
   const [selectedAccountId, setSelectedAccountId] = useState('')
+  const [editingBillItem, setEditingBillItem] = useState<BillTransaction | null>(null)
+  const [editBillForm, setEditBillForm] = useState<{ amount: string; cardBrand: string; customCardBrand: string }>({
+    amount: '',
+    cardBrand: CREDIT_CARD_BRANDS[0],
+    customCardBrand: ''
+  })
   const [form, setForm] = useState<{ description: string; amount: string; cardBrand: string; customCardBrand: string; dueMonth: string; personName: string; installments: string }>({
     description: '',
     amount: '',
@@ -100,6 +111,9 @@ export default function BillsPage() {
   const selectedCardBrand = form.cardBrand === CUSTOM_CARD_VALUE
     ? form.customCardBrand.trim().toUpperCase()
     : form.cardBrand
+  const editSelectedCardBrand = editBillForm.cardBrand === CUSTOM_CARD_VALUE
+    ? editBillForm.customCardBrand.trim().toUpperCase()
+    : editBillForm.cardBrand
 
   async function loadBills() {
     setLoading(true)
@@ -281,6 +295,55 @@ export default function BillsPage() {
       triggerDashboardRefresh()
     } catch (error: any) {
       addToast(error?.response?.data?.error || 'Nao foi possivel excluir este item.', 'error')
+    }
+  }
+
+  function openEditBillItem(item: BillTransaction) {
+    const currentCardBrand = item.cardBrand || extractCardBrandFromDescription(item.description)
+    const isKnownBrand = CREDIT_CARD_BRANDS.includes(currentCardBrand as typeof CREDIT_CARD_BRANDS[number])
+
+    setEditingBillItem(item)
+    setEditBillForm({
+      amount: String(Number(item.amount || 0).toFixed(2)),
+      cardBrand: isKnownBrand ? currentCardBrand : CUSTOM_CARD_VALUE,
+      customCardBrand: isKnownBrand ? '' : currentCardBrand,
+    })
+  }
+
+  async function handleSaveEditBillItem(e: React.FormEvent) {
+    e.preventDefault()
+
+    if (!editingBillItem) return
+
+    const nextAmount = Number(String(editBillForm.amount || '').replace(',', '.'))
+    if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
+      addToast('Informe um valor valido.', 'error')
+      return
+    }
+
+    if (!editSelectedCardBrand) {
+      addToast('Informe o nome do banco/cartao.', 'error')
+      return
+    }
+
+    try {
+      const currentPerson = extractPersonFromDescription(editingBillItem.description)
+      const baseDescription = cleanDescription(editingBillItem.description)
+      const personTag = currentPerson ? ` | Pessoa: ${currentPerson}` : ''
+      const nextDescription = `${baseDescription} | Cartao: ${editSelectedCardBrand}${personTag}`
+
+      await api.patch(`/dashboard/transactions/${editingBillItem.id}`, {
+        amount: nextAmount,
+        description: nextDescription,
+      })
+
+      addToast('Fatura atualizada com sucesso.', 'success')
+      setEditingBillItem(null)
+      setEditBillForm({ amount: '', cardBrand: CREDIT_CARD_BRANDS[0], customCardBrand: '' })
+      await loadBills()
+      triggerDashboardRefresh()
+    } catch (error: any) {
+      addToast(error?.response?.data?.error || 'Nao foi possivel atualizar a fatura.', 'error')
     }
   }
 
@@ -466,23 +529,10 @@ export default function BillsPage() {
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
                         type="button"
-                        onClick={async () => {
-                          const value = window.prompt('Editar valor da fatura', String(Number(item.amount || 0).toFixed(2)).replace('.', ','))
-                          if (value === null) return
-                          const normalized = value.replace(/\./g, '').replace(',', '.').replace(/[^0-9.-]/g, '')
-                          const nextAmount = Number(normalized)
-                          if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
-                            addToast('Informe um valor valido.', 'error')
-                            return
-                          }
-                          await api.patch(`/dashboard/transactions/${item.id}`, { amount: nextAmount })
-                          addToast('Valor da fatura atualizado com sucesso.', 'success')
-                          await loadBills()
-                          triggerDashboardRefresh()
-                        }}
+                        onClick={() => openEditBillItem(item)}
                         className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/20"
                       >
-                        Editar valor
+                        Editar item
                       </button>
                       <button
                         type="button"
@@ -548,6 +598,83 @@ export default function BillsPage() {
           </div>
         ))}
       </div>
+
+      {editingBillItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-3xl border border-cyan-500/20 bg-slate-900 p-6 shadow-[0_18px_60px_rgba(2,8,23,0.6)]">
+            <div className="mb-4 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-bold text-white">Editar fatura</h3>
+                <p className="text-sm text-slate-400">Altere valor e banco/cartão do item selecionado.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingBillItem(null)}
+                className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-800"
+              >
+                Fechar
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditBillItem} className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-slate-400">Valor</label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={editBillForm.amount}
+                  onChange={(e) => setEditBillForm((p) => ({ ...p, amount: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                  placeholder="0,00"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-slate-400">Cartão</label>
+                <select
+                  value={editBillForm.cardBrand}
+                  onChange={(e) => setEditBillForm((p) => ({ ...p, cardBrand: e.target.value }))}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                >
+                  {CREDIT_CARD_BRANDS.map((card) => (
+                    <option key={card} value={card}>{card}</option>
+                  ))}
+                  <option value={CUSTOM_CARD_VALUE}>Outro (cadastrar banco/cartão)</option>
+                </select>
+              </div>
+
+              {editBillForm.cardBrand === CUSTOM_CARD_VALUE && (
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs uppercase tracking-[0.16em] text-slate-400">Nome do banco/cartão</label>
+                  <input
+                    type="text"
+                    value={editBillForm.customCardBrand}
+                    onChange={(e) => setEditBillForm((p) => ({ ...p, customCardBrand: e.target.value }))}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"
+                    placeholder="Ex: XP, C6, Inter..."
+                  />
+                </div>
+              )}
+
+              <div className="md:col-span-2 flex flex-wrap gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 rounded-xl bg-cyan-400 px-4 py-2.5 text-sm font-semibold text-slate-950 transition-colors hover:bg-cyan-300"
+                >
+                  Salvar alterações
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingBillItem(null)}
+                  className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-2.5 text-sm font-semibold text-slate-300 hover:bg-slate-800"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
