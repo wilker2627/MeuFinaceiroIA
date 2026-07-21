@@ -23,8 +23,8 @@ const defaultNavItems = [
 
 const businessNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard/transactions', label: 'Lançamentos', icon: ArrowUpDown },
-  { href: '/dashboard/cashflow', label: 'Relatórios', icon: TrendingUp },
+  { href: '/dashboard/transactions', label: 'Contas a Pagar', icon: ArrowUpDown },
+  { href: '/dashboard/cashflow', label: 'Contas Pagas', icon: TrendingUp },
   { href: '/dashboard/settings', label: 'Configuração', icon: Settings },
 ]
 

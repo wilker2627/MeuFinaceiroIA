@@ -803,7 +803,7 @@ export default function TransactionsPage() {
       <div className="relative space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl md:text-3xl font-black text-white">Lançamentos</h1>
+          <h1 className="text-2xl md:text-3xl font-black text-white">{isBusinessPlan ? 'Contas a Pagar' : 'Lançamentos'}</h1>
           <p className="text-slate-400 text-sm mt-1">{transactions.length} {isBusinessPlan ? 'conta(s) encontrada(s)' : 'transações encontradas'}</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">

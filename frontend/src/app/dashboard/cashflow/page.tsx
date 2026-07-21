@@ -48,9 +48,9 @@ export default function CashFlowPage() {
         const monthKeys = Array.from({ length: 12 }, (_, index) => monthKeyFromOffset(index)).reverse()
         const reports = await Promise.all(monthKeys.map(async (monthKey) => {
           const [paidRes, pendingRes, overdueRes] = await Promise.all([
-            api.get(`/dashboard/transactions?month=${monthKey}&monthField=dueDate&type=EXPENSE&status=PAID&paymentMethod=CREDIT_CARD&limit=500&page=1`),
-            api.get(`/dashboard/transactions?month=${monthKey}&monthField=dueDate&type=EXPENSE&status=PENDING&paymentMethod=CREDIT_CARD&limit=500&page=1`),
-            api.get(`/dashboard/transactions?month=${monthKey}&monthField=dueDate&type=EXPENSE&status=OVERDUE&paymentMethod=CREDIT_CARD&limit=500&page=1`),
+            api.get(`/dashboard/transactions?month=${monthKey}&monthField=dueDate&type=EXPENSE&status=PAID&limit=500&page=1`),
+            api.get(`/dashboard/transactions?month=${monthKey}&monthField=dueDate&type=EXPENSE&status=PENDING&limit=500&page=1`),
+            api.get(`/dashboard/transactions?month=${monthKey}&monthField=dueDate&type=EXPENSE&status=OVERDUE&limit=500&page=1`),
           ])
 
           const paid = paidRes.data?.transactions || []
@@ -109,8 +109,8 @@ export default function CashFlowPage() {
 
         <div className="relative space-y-6">
           <div>
-            <h1 className="text-2xl md:text-3xl font-black text-white">Relatórios da Empresa</h1>
-            <p className="text-slate-400 text-sm mt-1">Resumo simples de boletos pagos, pendentes e vencidos por mês.</p>
+            <h1 className="text-2xl md:text-3xl font-black text-white">Contas Pagas</h1>
+            <p className="text-slate-400 text-sm mt-1">Acompanhe pagamentos e histórico mensal de contas da empresa.</p>
           </div>
 
           <div className="grid gap-3 md:grid-cols-4">
@@ -150,7 +150,7 @@ export default function CashFlowPage() {
 
           <div className={`p-6 ${panelClass}`}>
             <h2 className="mb-4 text-lg font-semibold text-white">Ação rápida</h2>
-            <p className="text-slate-300 text-sm">Use o módulo de Lançamentos para copiar código de barras ou Pix e, depois de pagar no banco, marque como pago.</p>
+            <p className="text-slate-300 text-sm">Use Contas a Pagar para copiar código de barras ou Pix e, depois de pagar no banco, marque como pago.</p>
           </div>
         </div>
       </div>
