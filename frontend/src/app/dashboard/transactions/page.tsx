@@ -180,7 +180,7 @@ export default function TransactionsPage() {
   const panelClass = 'dashboard-panel rounded-2xl border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.45)]'
   const selectedFormPayment = getPaymentMethodMeta(form.paymentMethod)
   const isBusinessPlan = String(tenant?.plan || '').toUpperCase() === 'EMPRESA'
-  const isBusinessExpense = isBusinessPlan && form.type === 'EXPENSE'
+  const isBusinessExpense = isBusinessPlan
   const selectedFilterPayment = paymentMethodFilter ? getPaymentMethodMeta(paymentMethodFilter) : null
   const isCreditExpense = form.type === 'EXPENSE' && form.paymentMethod === 'CREDIT_CARD'
   const selectedCardBrand = form.cardBrand === CUSTOM_CARD_VALUE
@@ -542,7 +542,7 @@ export default function TransactionsPage() {
         return
       }
 
-      const installments = isCreditExpense ? Math.min(Math.max(parseInt(form.creditBillingOption) || 1, 1), 12) : 1
+      const installments = isBusinessPlan ? 1 : (isCreditExpense ? Math.min(Math.max(parseInt(form.creditBillingOption) || 1, 1), 12) : 1)
       const baseAmount = Number(form.amount)
       const cardTag = isCreditExpense ? ` | Cartao: ${selectedCardBrand}` : ''
       const personTag = form.personName.trim() ? ` | Pessoa: ${form.personName.trim()}` : ''
@@ -551,19 +551,21 @@ export default function TransactionsPage() {
       const docTag = documentCode ? ` | DocCode: ${documentCode}` : ''
       const pixTag = pixCopyPaste ? ` | Pix: ${pixCopyPaste}` : ''
       const baseDescription = `${form.description}${cardTag}${personTag}${docTag}${pixTag}`
-      const currentBillDate = isCreditExpense && form.creditBillingOption === 'CURRENT_BILL' ? new Date() : undefined
+      const currentBillDate = !isBusinessPlan && isCreditExpense && form.creditBillingOption === 'CURRENT_BILL' ? new Date() : undefined
       const enterpriseDueDate = isBusinessExpense && form.businessDueDate
         ? new Date(`${form.businessDueDate}T00:00:00.000Z`)
         : undefined
       const shouldStartAsPending = isBusinessExpense
+      const nextType = isBusinessPlan ? 'EXPENSE' : form.type
+      const nextPaymentMethod = isBusinessPlan ? 'PIX' : form.paymentMethod
 
       await api.post('/dashboard/transactions', {
-        type: form.type,
+        type: nextType,
         amount: baseAmount,
         description: baseDescription,
         categoryId: form.categoryId || undefined,
-        paymentMethod: form.paymentMethod,
-        accountId: isCreditExpense ? undefined : (accounts[0]?.id || undefined),
+        paymentMethod: nextPaymentMethod,
+        accountId: isBusinessPlan ? undefined : (isCreditExpense ? undefined : (accounts[0]?.id || undefined)),
         personName: form.personName.trim() || undefined,
         installments,
         isPaid: shouldStartAsPending ? false : (isCreditExpense ? false : true),
@@ -821,14 +823,20 @@ export default function TransactionsPage() {
       {/* Formulário */}
       {showForm && (
         <form onSubmit={handleAdd} className={`p-6 grid grid-cols-2 md:grid-cols-6 gap-4 ${panelClass}`}>
-          <div>
-            <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Tipo</label>
-            <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}
-              className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
-              <option value="EXPENSE">Saída</option>
-              <option value="INCOME">Entrada</option>
-            </select>
-          </div>
+          {isBusinessPlan ? (
+            <div className="col-span-2 md:col-span-6 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
+              Lançamento empresarial fixo em boleto/Pix. Use este formulário apenas para contas a pagar.
+            </div>
+          ) : (
+            <div>
+              <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Tipo</label>
+              <select value={form.type} onChange={e => setForm(p => ({ ...p, type: e.target.value }))}
+                className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
+                <option value="EXPENSE">Saída</option>
+                <option value="INCOME">Entrada</option>
+              </select>
+            </div>
+          )}
           <div>
             <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Valor (R$)</label>
             <input type="number" step="0.01" required value={form.amount} onChange={e => {
@@ -871,60 +879,12 @@ export default function TransactionsPage() {
             <select value={form.categoryId} onChange={e => setForm(p => ({ ...p, categoryId: e.target.value }))}
               className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
               <option value="">Sem categoria</option>
-              {categories.filter(c => c.type === form.type).map(c => (
+              {categories.filter(c => c.type === (isBusinessPlan ? 'EXPENSE' : form.type)).map(c => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
             </select>
           </div>
-          <div>
-            <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Forma de pagamento</label>
-            <select value={form.paymentMethod} onChange={e => setForm(p => ({ ...p, paymentMethod: e.target.value }))}
-              className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
-              {PAYMENT_METHODS.map((method) => (
-                <option key={method.value} value={method.value}>{method.label}</option>
-              ))}
-            </select>
-            <div className="mt-2">
-              <PaymentMethodChip meta={selectedFormPayment} />
-            </div>
-          </div>
-          {isCreditExpense && (
-            <div>
-              <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Cartao</label>
-              <select value={form.cardBrand} onChange={e => setForm(p => ({ ...p, cardBrand: e.target.value }))}
-                className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
-                {CREDIT_CARD_BRANDS.map((card) => (
-                  <option key={card} value={card}>{card}</option>
-                ))}
-                <option value={CUSTOM_CARD_VALUE}>Outro (cadastrar banco/cartao)</option>
-              </select>
-            </div>
-          )}
-          {isCreditExpense && form.cardBrand === CUSTOM_CARD_VALUE && (
-            <div className="col-span-2 md:col-span-3">
-              <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Nome do banco/cartão</label>
-              <input
-                type="text"
-                value={form.customCardBrand}
-                onChange={e => setForm(p => ({ ...p, customCardBrand: e.target.value }))}
-                className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2"
-                placeholder="Ex: XP, C6, Inter..."
-              />
-            </div>
-          )}
-          {isCreditExpense && (
-            <div>
-              <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Fatura do cartao</label>
-              <select value={form.creditBillingOption} onChange={e => setForm(p => ({ ...p, creditBillingOption: e.target.value }))}
-                className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
-                <option value="CURRENT_BILL">Fatura atual</option>
-                {Array.from({ length: 12 }, (_, index) => index + 1).map((value) => (
-                  <option key={value} value={String(value)}>{value}x</option>
-                ))}
-              </select>
-            </div>
-          )}
-          {isBusinessExpense && (
+          {isBusinessPlan ? (
             <>
               <div className="col-span-2 md:col-span-3">
                 <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Codigo de barras / linha digitavel</label>
@@ -974,7 +934,65 @@ export default function TransactionsPage() {
                 </button>
               </div>
             </>
+          ) : (
+            <>
+              <div>
+                <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Forma de pagamento</label>
+                <select value={form.paymentMethod} onChange={e => setForm(p => ({ ...p, paymentMethod: e.target.value }))}
+                  className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
+                  {PAYMENT_METHODS.map((method) => (
+                    <option key={method.value} value={method.value}>{method.label}</option>
+                  ))}
+                </select>
+                <div className="mt-2">
+                  <PaymentMethodChip meta={selectedFormPayment} />
+                </div>
+              </div>
+              {isCreditExpense && (
+                <div>
+                  <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Cartao</label>
+                  <select value={form.cardBrand} onChange={e => setForm(p => ({ ...p, cardBrand: e.target.value }))}
+                    className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
+                    {CREDIT_CARD_BRANDS.map((card) => (
+                      <option key={card} value={card}>{card}</option>
+                    ))}
+                    <option value={CUSTOM_CARD_VALUE}>Outro (cadastrar banco/cartao)</option>
+                  </select>
+                </div>
+              )}
+              {isCreditExpense && form.cardBrand === CUSTOM_CARD_VALUE && (
+                <div className="col-span-2 md:col-span-3">
+                  <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Nome do banco/cartão</label>
+                  <input
+                    type="text"
+                    value={form.customCardBrand}
+                    onChange={e => setForm(p => ({ ...p, customCardBrand: e.target.value }))}
+                    className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2"
+                    placeholder="Ex: XP, C6, Inter..."
+                  />
+                </div>
+              )}
+              {isCreditExpense && (
+                <div>
+                  <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Fatura do cartao</label>
+                  <select value={form.creditBillingOption} onChange={e => setForm(p => ({ ...p, creditBillingOption: e.target.value }))}
+                    className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2">
+                    <option value="CURRENT_BILL">Fatura atual</option>
+                    {Array.from({ length: 12 }, (_, index) => index + 1).map((value) => (
+                      <option key={value} value={String(value)}>{value}x</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </>
           )}
+          <div className="col-span-2 md:col-span-6 flex items-center justify-between gap-3 pt-2">
+            {isBusinessPlan ? (
+              <p className="text-xs text-slate-400">Lançamento empresarial criado como boleto/Pix e fica pendente até ser marcado como pago.</p>
+            ) : (
+              <p className="text-xs text-slate-400">Use cartões de crédito apenas para parcelamentos. O restante segue o fluxo padrão.</p>
+            )}
+          </div>
           <div className="flex items-end gap-2">
             <button type="submit" disabled={saving} className="bg-cyan-400 hover:bg-cyan-300 disabled:opacity-60 text-slate-950 font-semibold px-4 py-2 rounded-lg flex items-center gap-2">
               {saving && <Loader size={16} className="animate-spin" />}

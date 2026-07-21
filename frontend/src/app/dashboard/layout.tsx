@@ -24,7 +24,6 @@ const defaultNavItems = [
 const businessNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/transactions', label: 'Lançamentos', icon: ArrowUpDown },
-  { href: '/dashboard/bills', label: 'Faturas', icon: ReceiptText },
   { href: '/dashboard/cashflow', label: 'Relatórios', icon: TrendingUp },
   { href: '/dashboard/settings', label: 'Configuração', icon: Settings },
 ]

@@ -1318,7 +1318,6 @@ export default function DashboardPage() {
               </div>
               <div className="flex gap-2">
                 <Link href="/dashboard/transactions" className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-300">Lançar boleto</Link>
-                <Link href="/dashboard/bills" className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800">Ver faturas</Link>
               </div>
             </div>
 
@@ -1658,7 +1657,6 @@ export default function DashboardPage() {
                 {isBusinessPlan && (
                   <div className="mt-4 grid grid-cols-2 gap-2 text-xs sm:grid-cols-5">
                     <Link href="/dashboard/transactions" className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-2 py-1.5 text-center text-cyan-200 hover:bg-cyan-400/20">Operacoes</Link>
-                    <Link href="/dashboard/bills" className="rounded-lg border border-violet-400/30 bg-violet-400/10 px-2 py-1.5 text-center text-violet-200 hover:bg-violet-400/20">Faturas</Link>
                     <Link href="/dashboard/cashflow" className="rounded-lg border border-emerald-400/30 bg-emerald-400/10 px-2 py-1.5 text-center text-emerald-200 hover:bg-emerald-400/20">Fluxo de Caixa</Link>
                     <Link href="/dashboard/whatsapp" className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-2 py-1.5 text-center text-amber-200 hover:bg-amber-400/20">WhatsApp</Link>
                     <Link href="/dashboard/settings" className="rounded-lg border border-slate-500/30 bg-slate-500/10 px-2 py-1.5 text-center text-slate-200 hover:bg-slate-500/20">Configuracao</Link>
