@@ -278,7 +278,7 @@ function parsePaymentCode(rawCode: string): { amount?: number; dueDate?: string;
     barcode = convertLinhaDigitavel48ToBarcode(digits)
     lineCode = digits
   } else {
-    return { normalizedCode: digits }
+    return {}
   }
 
   if (barcode.startsWith('8')) {
@@ -527,6 +527,7 @@ export default function TransactionsPage() {
               facingMode: { ideal: 'environment' },
               width: { ideal: 1920 },
               height: { ideal: 1080 },
+              aspectRatio: { ideal: 16 / 9 },
               advanced: [{ focusMode: 'continuous' } as any]
             }
           },
@@ -1273,12 +1274,20 @@ export default function TransactionsPage() {
             </div>
 
             <div className="rounded-2xl border border-slate-700 bg-black/60 p-2">
-              <video ref={videoRef} className="h-72 w-full rounded-xl bg-black object-contain" muted playsInline autoPlay />
+              <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black">
+                <video ref={videoRef} className="h-full w-full object-contain" muted playsInline autoPlay />
+                {scannerMode === 'barcode' && (
+                  <div className="pointer-events-none absolute inset-x-6 top-1/2 h-0.5 -translate-y-1/2 bg-cyan-400/80 shadow-[0_0_0_1px_rgba(34,211,238,0.35)]" />
+                )}
+              </div>
             </div>
 
             <p className="mt-3 text-sm text-slate-300">{scannerMessage}</p>
             {scannerLoading && <p className="mt-1 text-xs text-cyan-300">Inicializando camera...</p>}
             {scannerError && <p className="mt-1 text-xs text-rose-300">{scannerError}</p>}
+            {scannerMode === 'barcode' && (
+              <p className="mt-2 text-xs text-slate-400">Aponte o boleto na horizontal e mantenha a linha do código dentro da faixa azul.</p>
+            )}
           </div>
         </div>
       )}
