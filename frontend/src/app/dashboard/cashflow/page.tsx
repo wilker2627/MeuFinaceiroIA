@@ -6,16 +6,74 @@ import { formatCurrency } from '@/lib/utils'
 import AnimatedCurrency from '@/components/AnimatedCurrency'
 import { BarChart3, ChartColumnIncreasing, PieChart, Users } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { useAuth } from '@/contexts/AuthContext'
+
+type BusinessMonthReport = {
+  monthKey: string
+  label: string
+  paidCount: number
+  paidTotal: number
+  pendingCount: number
+  pendingTotal: number
+  overdueCount: number
+  overdueTotal: number
+}
 
 export default function CashFlowPage() {
+  const { tenant } = useAuth()
+  const isBusinessPlan = String(tenant?.plan || '').toUpperCase() === 'EMPRESA'
   const [evolution, setEvolution] = useState<any[]>([])
   const [categories, setCategories] = useState<any[]>([])
   const [teamReport, setTeamReport] = useState<any>(null)
+  const [businessMonths, setBusinessMonths] = useState<BusinessMonthReport[]>([])
   const [loading, setLoading] = useState(true)
   const panelClass = 'dashboard-panel rounded-2xl border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.45)]'
 
+  function monthKeyFromOffset(offset: number) {
+    const date = new Date()
+    date.setMonth(date.getMonth() - offset)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    return `${year}-${month}`
+  }
+
+  function monthLabel(monthKey: string) {
+    const [year, month] = monthKey.split('-').map(Number)
+    return new Date(year, month - 1, 1).toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
+  }
+
   useEffect(() => {
     async function load() {
+      if (isBusinessPlan) {
+        const monthKeys = Array.from({ length: 12 }, (_, index) => monthKeyFromOffset(index)).reverse()
+        const reports = await Promise.all(monthKeys.map(async (monthKey) => {
+          const [paidRes, pendingRes, overdueRes] = await Promise.all([
+            api.get(`/dashboard/transactions?month=${monthKey}&monthField=dueDate&type=EXPENSE&status=PAID&paymentMethod=CREDIT_CARD&limit=500&page=1`),
+            api.get(`/dashboard/transactions?month=${monthKey}&monthField=dueDate&type=EXPENSE&status=PENDING&paymentMethod=CREDIT_CARD&limit=500&page=1`),
+            api.get(`/dashboard/transactions?month=${monthKey}&monthField=dueDate&type=EXPENSE&status=OVERDUE&paymentMethod=CREDIT_CARD&limit=500&page=1`),
+          ])
+
+          const paid = paidRes.data?.transactions || []
+          const pending = pendingRes.data?.transactions || []
+          const overdue = overdueRes.data?.transactions || []
+
+          return {
+            monthKey,
+            label: monthLabel(monthKey),
+            paidCount: paid.length,
+            paidTotal: paid.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0),
+            pendingCount: pending.length,
+            pendingTotal: pending.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0),
+            overdueCount: overdue.length,
+            overdueTotal: overdue.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0),
+          }
+        }))
+
+        setBusinessMonths(reports)
+        setLoading(false)
+        return
+      }
+
       const [e, c, t] = await Promise.all([
         api.get('/dashboard/evolution?months=12'),
         api.get('/dashboard/categories'),
@@ -27,9 +85,77 @@ export default function CashFlowPage() {
       setLoading(false)
     }
     load()
-  }, [])
+  }, [isBusinessPlan])
 
   if (loading) return <div className="flex items-center justify-center h-full"><p className="text-gray-400">Carregando...</p></div>
+
+  if (isBusinessPlan) {
+    const current = businessMonths[businessMonths.length - 1] || {
+      monthKey: new Date().toISOString().slice(0, 7),
+      label: new Date().toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' }),
+      paidCount: 0,
+      paidTotal: 0,
+      pendingCount: 0,
+      pendingTotal: 0,
+      overdueCount: 0,
+      overdueTotal: 0,
+    }
+
+    return (
+      <div className="relative p-4 md:p-6">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute top-10 -right-24 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
+        </div>
+
+        <div className="relative space-y-6">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-black text-white">Relatórios da Empresa</h1>
+            <p className="text-slate-400 text-sm mt-1">Resumo simples de boletos pagos, pendentes e vencidos por mês.</p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-4">
+            <SummaryCard label="Pagos no mês" value={String(current.paidCount)} note={formatCurrency(current.paidTotal)} tone="green" />
+            <SummaryCard label="A pagar" value={String(current.pendingCount)} note={formatCurrency(current.pendingTotal)} tone="amber" />
+            <SummaryCard label="Vencidos" value={String(current.overdueCount)} note={formatCurrency(current.overdueTotal)} tone="red" />
+            <SummaryCard label="Meses analisados" value={String(businessMonths.length)} note="Últimos 12 meses" tone="cyan" />
+          </div>
+
+          <div className={`p-6 ${panelClass}`}>
+            <h2 className="mb-4 text-lg font-semibold text-white">Histórico mensal</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-gray-400">
+                  <tr>
+                    <th className="text-left py-2">Mês</th>
+                    <th className="text-right py-2">Pagos</th>
+                    <th className="text-right py-2">Total pago</th>
+                    <th className="text-right py-2">A pagar</th>
+                    <th className="text-right py-2">Vencidos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {businessMonths.slice().reverse().map((month) => (
+                    <tr key={month.monthKey} className="border-t border-cyan-500/15">
+                      <td className="py-3 text-white font-medium">{month.label}</td>
+                      <td className="py-3 text-right text-emerald-300">{month.paidCount}</td>
+                      <td className="py-3 text-right text-emerald-300">{formatCurrency(month.paidTotal)}</td>
+                      <td className="py-3 text-right text-amber-300">{month.pendingCount}</td>
+                      <td className="py-3 text-right text-rose-300">{month.overdueCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className={`p-6 ${panelClass}`}>
+            <h2 className="mb-4 text-lg font-semibold text-white">Ação rápida</h2>
+            <p className="text-slate-300 text-sm">Use o módulo de Lançamentos para copiar código de barras ou Pix e, depois de pagar no banco, marque como pago.</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="relative p-4 md:p-6">
@@ -144,6 +270,23 @@ export default function CashFlowPage() {
         </div>
       </div>
       </div>
+    </div>
+  )
+}
+
+function SummaryCard({ label, value, note, tone }: { label: string; value: string; note: string; tone: 'green' | 'amber' | 'red' | 'cyan' }) {
+  const toneClass = {
+    green: 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200',
+    amber: 'border-amber-500/25 bg-amber-500/10 text-amber-200',
+    red: 'border-rose-500/25 bg-rose-500/10 text-rose-200',
+    cyan: 'border-cyan-500/25 bg-cyan-500/10 text-cyan-200'
+  }
+
+  return (
+    <div className={`rounded-2xl border p-4 ${toneClass[tone]}`}>
+      <p className="text-xs uppercase tracking-[0.18em] text-white/60">{label}</p>
+      <p className="mt-2 text-3xl font-black text-white">{value}</p>
+      <p className="mt-1 text-sm text-white/70">{note}</p>
     </div>
   )
 }
