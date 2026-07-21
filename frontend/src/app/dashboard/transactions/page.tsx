@@ -7,6 +7,7 @@ import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { BrowserMultiFormatReader } from '@zxing/browser'
 import { BarcodeFormat, DecodeHintType } from '@zxing/library'
+import { recognize } from 'tesseract.js'
 import { Plus, Trash2, Search, CreditCard, Wallet, QrCode, Loader, ChevronDown, ChevronRight, PencilLine } from 'lucide-react'
 import ConfirmModal from '@/components/ConfirmModal'
 import EmptyState, { LoadingSkeleton } from '@/components/EmptyState'
@@ -308,6 +309,26 @@ function formatInvoiceMonth(monthKey: string) {
   return new Date(year, month - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
 }
 
+function parseDateFromText(text: string) {
+  const normalized = String(text || '')
+    .replace(/\s+/g, ' ')
+    .replace(/[|]/g, ' ')
+
+  const explicitMatch = normalized.match(/venc(?:imento)?[^0-9]{0,20}(\d{2})[\/.-](\d{2})[\/.-](\d{4})/i)
+  if (explicitMatch) {
+    const [, day, month, year] = explicitMatch
+    return `${year}-${month}-${day}`
+  }
+
+  const matches = Array.from(normalized.matchAll(/\b(\d{2})[\/.-](\d{2})[\/.-](\d{4})\b/g))
+  if (matches.length > 0) {
+    const [, day, month, year] = matches[matches.length - 1]
+    return `${year}-${month}-${day}`
+  }
+
+  return undefined
+}
+
 function waitForImageLoad(image: HTMLImageElement) {
   return new Promise<void>((resolve, reject) => {
     image.onload = () => resolve()
@@ -315,7 +336,15 @@ function waitForImageLoad(image: HTMLImageElement) {
   })
 }
 
-async function buildScanDataUrl(file: File, rotationDeg: number) {
+type ScanVariant = {
+  rotationDeg: number
+  cropTopRatio?: number
+  cropHeightRatio?: number
+  scale?: number
+  threshold?: number
+}
+
+async function buildScanDataUrl(file: File, variant: ScanVariant) {
   const image = new Image()
   image.src = URL.createObjectURL(file)
   try {
@@ -323,22 +352,52 @@ async function buildScanDataUrl(file: File, rotationDeg: number) {
 
     const naturalWidth = image.naturalWidth || image.width
     const naturalHeight = image.naturalHeight || image.height
-    const swapDimensions = rotationDeg === 90 || rotationDeg === 270
+    const swapDimensions = variant.rotationDeg === 90 || variant.rotationDeg === 270
     const canvasWidth = swapDimensions ? naturalHeight : naturalWidth
     const canvasHeight = swapDimensions ? naturalWidth : naturalHeight
+    const cropTopRatio = Math.max(0, Math.min(1, variant.cropTopRatio ?? 0))
+    const cropHeightRatio = Math.max(0.15, Math.min(1, variant.cropHeightRatio ?? 1))
+    const cropSourceHeight = Math.max(1, Math.floor(naturalHeight * cropHeightRatio))
+    const cropSourceWidth = naturalWidth
+    const cropSourceY = Math.max(0, Math.min(naturalHeight - cropSourceHeight, Math.floor(naturalHeight * cropTopRatio)))
+    const scale = Math.max(1, variant.scale ?? 1)
 
     const canvas = document.createElement('canvas')
-    canvas.width = canvasWidth
-    canvas.height = canvasHeight
+    canvas.width = Math.max(1, Math.floor(canvasWidth * scale))
+    canvas.height = Math.max(1, Math.floor(canvasHeight * scale))
 
     const context = canvas.getContext('2d')
     if (!context) throw new Error('canvas_unavailable')
 
+    context.imageSmoothingEnabled = false
+    context.filter = variant.threshold ? `contrast(180%) brightness(115%) grayscale(100%)` : 'contrast(140%) brightness(108%) grayscale(100%)'
+
     context.save()
-    context.translate(canvasWidth / 2, canvasHeight / 2)
-    context.rotate((rotationDeg * Math.PI) / 180)
-    context.drawImage(image, -naturalWidth / 2, -naturalHeight / 2, naturalWidth, naturalHeight)
+    context.translate(canvas.width / 2, canvas.height / 2)
+    context.rotate((variant.rotationDeg * Math.PI) / 180)
+    context.drawImage(
+      image,
+      -cropSourceWidth / 2,
+      -(cropSourceHeight / 2) - (naturalHeight / 2 - cropSourceY - cropSourceHeight / 2),
+      cropSourceWidth,
+      cropSourceHeight
+    )
     context.restore()
+
+    if (variant.threshold) {
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+      const threshold = variant.threshold
+      const data = imageData.data
+      for (let i = 0; i < data.length; i += 4) {
+        const luminance = Math.round((data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000)
+        const next = luminance > threshold ? 255 : 0
+        data[i] = next
+        data[i + 1] = next
+        data[i + 2] = next
+        data[i + 3] = 255
+      }
+      context.putImageData(imageData, 0, 0)
+    }
 
     return canvas.toDataURL('image/png')
   } finally {
@@ -352,11 +411,19 @@ async function decodeBoletoFromPhoto(file: File) {
   hints.set(DecodeHintType.TRY_HARDER, true)
 
   const reader = new BrowserMultiFormatReader(hints)
-  const attempts = [0, 90, 270]
+  const attempts: ScanVariant[] = [
+    { rotationDeg: 0, scale: 2 },
+    { rotationDeg: 0, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3 },
+    { rotationDeg: 0, cropTopRatio: 0.45, cropHeightRatio: 0.4, scale: 3, threshold: 170 },
+    { rotationDeg: 90, scale: 2 },
+    { rotationDeg: 270, scale: 2 },
+    { rotationDeg: 90, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3, threshold: 165 },
+    { rotationDeg: 270, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3, threshold: 165 },
+  ]
 
-  for (const rotation of attempts) {
+  for (const variant of attempts) {
     try {
-      const dataUrl = await buildScanDataUrl(file, rotation)
+      const dataUrl = await buildScanDataUrl(file, variant)
       const result = await reader.decodeFromImageUrl(dataUrl)
       const text = String(result.getText() || '').trim()
       if (text) return text
@@ -366,6 +433,29 @@ async function decodeBoletoFromPhoto(file: File) {
   }
 
   throw new Error('bolet_photo_decode_failed')
+}
+
+async function extractDueDateFromPhoto(file: File) {
+  const attempts: ScanVariant[] = [
+    { rotationDeg: 0, scale: 2 },
+    { rotationDeg: 0, cropTopRatio: 0.02, cropHeightRatio: 0.58, scale: 3, threshold: 168 },
+    { rotationDeg: 0, cropTopRatio: 0.12, cropHeightRatio: 0.48, scale: 3, threshold: 165 },
+    { rotationDeg: 90, scale: 2 },
+    { rotationDeg: 270, scale: 2 },
+  ]
+
+  for (const variant of attempts) {
+    try {
+      const dataUrl = await buildScanDataUrl(file, variant)
+      const result = await recognize(dataUrl, 'por')
+      const dueDate = parseDateFromText(result.data?.text || '')
+      if (dueDate) return dueDate
+    } catch {
+      // Keep trying the next OCR variant.
+    }
+  }
+
+  return undefined
 }
 
 export default function TransactionsPage() {
@@ -796,8 +886,29 @@ export default function TransactionsPage() {
 
     setPhotoScanning(true)
     try {
-      const decoded = await decodeBoletoFromPhoto(file)
-      applyBusinessCode(decoded, 'Foto do boleto lida com sucesso.')
+      const [decodedResult, dueDateResult] = await Promise.allSettled([
+        decodeBoletoFromPhoto(file),
+        extractDueDateFromPhoto(file),
+      ])
+
+      const decoded = decodedResult.status === 'fulfilled' ? decodedResult.value : ''
+      const dueDate = dueDateResult.status === 'fulfilled' ? dueDateResult.value : undefined
+
+      if (decoded) {
+        applyBusinessCode(decoded, dueDate ? 'Foto do boleto lida e vencimento identificado.' : 'Foto do boleto lida com sucesso.', dueDate)
+        return
+      }
+
+      if (dueDate) {
+        setForm((prev) => ({
+          ...prev,
+          businessDueDate: dueDate,
+        }))
+        addToast('Encontrei o vencimento na foto, mas nao consegui ler o codigo de barras.', 'warning')
+        return
+      }
+
+      throw new Error('foto_nao_lida')
     } catch {
       addToast('Nao consegui ler a foto. Tente deixar o boleto inteiro na imagem e tire outra foto mais focada.', 'warning')
     } finally {
@@ -805,7 +916,7 @@ export default function TransactionsPage() {
     }
   }
 
-  function applyBusinessCode(rawCode: string, successMessage = 'Codigo aplicado com sucesso.') {
+  function applyBusinessCode(rawCode: string, successMessage = 'Codigo aplicado com sucesso.', dueDateOverride?: string) {
     const cleaned = String(rawCode || '').trim().replace(/\s+/g, '')
     const digits = cleaned.replace(/\D/g, '')
     const parsed = parsePaymentCode(cleaned)
@@ -823,7 +934,7 @@ export default function TransactionsPage() {
       ...prev,
       businessDocCode: parsed.lineCode || parsed.normalizedCode || digits || cleaned,
       amount: parsed.amount ? String(parsed.amount.toFixed(2)) : prev.amount,
-      businessDueDate: parsed.dueDate || prev.businessDueDate,
+      businessDueDate: dueDateOverride || parsed.dueDate || prev.businessDueDate,
     }))
 
     addToast(successMessage, 'success')
