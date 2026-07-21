@@ -62,12 +62,6 @@ const getPaymentMethodMeta = (method?: string) => PAYMENT_METHOD_META[method || 
 
 const BARCODE_SCAN_FORMATS = [
   BarcodeFormat.ITF,
-  BarcodeFormat.CODE_128,
-  BarcodeFormat.CODE_39,
-  BarcodeFormat.EAN_13,
-  BarcodeFormat.EAN_8,
-  BarcodeFormat.UPC_A,
-  BarcodeFormat.UPC_E,
 ]
 
 const QR_SCAN_FORMATS = [
@@ -116,6 +110,16 @@ function extractDocumentCodeFromDescription(description: string) {
 function extractPixCopyFromDescription(description: string) {
   const match = String(description || '').match(PIX_COPY_TAG_REGEX)
   return match?.[1]?.trim() || ''
+}
+
+function normalizeScannedText(value: string) {
+  return String(value || '')
+    .trim()
+    .replace(/[Oo]/g, '0')
+    .replace(/[IiLl|]/g, '1')
+    .replace(/[Ss]/g, '5')
+    .replace(/[Bb]/g, '8')
+    .replace(/[Zz]/g, '2')
 }
 
 function formatIsoDate(date: Date) {
@@ -343,187 +347,9 @@ function parseDateFromText(text: string) {
   return undefined
 }
 
-function findValidBoletoDigitsFromText(text: string) {
-  const compact = String(text || '').replace(/\D/g, '')
-  if (!compact) return undefined
-
-  const lengths = [48, 47, 44]
-  for (const length of lengths) {
-    if (compact.length === length) {
-      const parsed = parsePaymentCode(compact)
-      if (parsed.normalizedCode) return compact
-    }
-
-    for (let index = 0; index + length <= compact.length; index += 1) {
-      const candidate = compact.slice(index, index + length)
-      const parsed = parsePaymentCode(candidate)
-      if (parsed.normalizedCode) return candidate
-    }
-  }
-
-  return undefined
-}
-
-function waitForImageLoad(image: HTMLImageElement) {
-  return new Promise<void>((resolve, reject) => {
-    image.onload = () => resolve()
-    image.onerror = () => reject(new Error('image_load_failed'))
-  })
-}
-
-type ScanVariant = {
-  rotationDeg: number
-  cropTopRatio?: number
-  cropHeightRatio?: number
-  scale?: number
-  threshold?: number
-}
-
-async function buildScanDataUrl(file: File, variant: ScanVariant) {
-  const image = new Image()
-  image.src = URL.createObjectURL(file)
-  try {
-    await waitForImageLoad(image)
-
-    const naturalWidth = image.naturalWidth || image.width
-    const naturalHeight = image.naturalHeight || image.height
-    const swapDimensions = variant.rotationDeg === 90 || variant.rotationDeg === 270
-    const canvasWidth = swapDimensions ? naturalHeight : naturalWidth
-    const canvasHeight = swapDimensions ? naturalWidth : naturalHeight
-    const cropTopRatio = Math.max(0, Math.min(1, variant.cropTopRatio ?? 0))
-    const cropHeightRatio = Math.max(0.15, Math.min(1, variant.cropHeightRatio ?? 1))
-    const cropSourceHeight = Math.max(1, Math.floor(naturalHeight * cropHeightRatio))
-    const cropSourceWidth = naturalWidth
-    const cropSourceY = Math.max(0, Math.min(naturalHeight - cropSourceHeight, Math.floor(naturalHeight * cropTopRatio)))
-    const scale = Math.max(1, variant.scale ?? 1)
-
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.max(1, Math.floor(canvasWidth * scale))
-    canvas.height = Math.max(1, Math.floor(canvasHeight * scale))
-
-    const context = canvas.getContext('2d')
-    if (!context) throw new Error('canvas_unavailable')
-
-    context.imageSmoothingEnabled = false
-    context.filter = variant.threshold ? `contrast(180%) brightness(115%) grayscale(100%)` : 'contrast(140%) brightness(108%) grayscale(100%)'
-
-    context.save()
-    context.translate(canvas.width / 2, canvas.height / 2)
-    context.rotate((variant.rotationDeg * Math.PI) / 180)
-    context.drawImage(
-      image,
-      -cropSourceWidth / 2,
-      -(cropSourceHeight / 2) - (naturalHeight / 2 - cropSourceY - cropSourceHeight / 2),
-      cropSourceWidth,
-      cropSourceHeight
-    )
-    context.restore()
-
-    if (variant.threshold) {
-      const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
-      const threshold = variant.threshold
-      const data = imageData.data
-      for (let i = 0; i < data.length; i += 4) {
-        const luminance = Math.round((data[i] * 299 + data[i + 1] * 587 + data[i + 2] * 114) / 1000)
-        const next = luminance > threshold ? 255 : 0
-        data[i] = next
-        data[i + 1] = next
-        data[i + 2] = next
-        data[i + 3] = 255
-      }
-      context.putImageData(imageData, 0, 0)
-    }
-
-    return canvas.toDataURL('image/png')
-  } finally {
-    URL.revokeObjectURL(image.src)
-  }
-}
-
-async function decodeBoletoFromPhoto(file: File) {
-  const hints = new Map()
-  hints.set(DecodeHintType.POSSIBLE_FORMATS, BARCODE_SCAN_FORMATS)
-  hints.set(DecodeHintType.TRY_HARDER, true)
-
-  const reader = new BrowserMultiFormatReader(hints)
-  const attempts: ScanVariant[] = [
-    { rotationDeg: 0, scale: 2 },
-    { rotationDeg: 0, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3 },
-    { rotationDeg: 0, cropTopRatio: 0.45, cropHeightRatio: 0.4, scale: 3, threshold: 170 },
-    { rotationDeg: 90, scale: 2 },
-    { rotationDeg: 270, scale: 2 },
-    { rotationDeg: 90, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3, threshold: 165 },
-    { rotationDeg: 270, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3, threshold: 165 },
-  ]
-
-  for (const variant of attempts) {
-    try {
-      const dataUrl = await buildScanDataUrl(file, variant)
-      const result = await reader.decodeFromImageUrl(dataUrl)
-      const text = String(result.getText() || '').trim()
-      if (text) return text
-    } catch {
-      // Keep trying the next orientation.
-    }
-  }
-
-  throw new Error('bolet_photo_decode_failed')
-}
-
-async function extractDueDateFromPhoto(file: File) {
-  const { recognize } = await import('tesseract.js')
-  const attempts: ScanVariant[] = [
-    { rotationDeg: 0, cropTopRatio: 0.45, cropHeightRatio: 0.45, scale: 3, threshold: 168 },
-    { rotationDeg: 0, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3, threshold: 166 },
-    { rotationDeg: 0, cropTopRatio: 0.2, cropHeightRatio: 0.6, scale: 2 },
-    { rotationDeg: 90, scale: 2 },
-    { rotationDeg: 270, scale: 2 },
-  ]
-
-  for (const variant of attempts) {
-    try {
-      const dataUrl = await buildScanDataUrl(file, variant)
-      const result = await recognize(dataUrl, 'por')
-      const dueDate = parseDateFromText(result.data?.text || '')
-      if (dueDate) return dueDate
-    } catch {
-      // Keep trying the next OCR variant.
-    }
-  }
-
-  return undefined
-}
-
-async function extractBoletoDigitsFromPhoto(file: File) {
-  const { recognize } = await import('tesseract.js')
-  const attempts: ScanVariant[] = [
-    { rotationDeg: 0, cropTopRatio: 0.45, cropHeightRatio: 0.42, scale: 4, threshold: 172 },
-    { rotationDeg: 0, cropTopRatio: 0.38, cropHeightRatio: 0.48, scale: 4, threshold: 168 },
-    { rotationDeg: 0, cropTopRatio: 0.25, cropHeightRatio: 0.6, scale: 3 },
-    { rotationDeg: 90, scale: 2 },
-    { rotationDeg: 270, scale: 2 },
-    { rotationDeg: 90, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3, threshold: 165 },
-    { rotationDeg: 270, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3, threshold: 165 },
-  ]
-
-  for (const variant of attempts) {
-    try {
-      const dataUrl = await buildScanDataUrl(file, variant)
-      const result = await recognize(dataUrl, 'por')
-      const digits = findValidBoletoDigitsFromText(result.data?.text || '')
-      if (digits) return digits
-    } catch {
-      // Keep trying the next OCR variant.
-    }
-  }
-
-  return undefined
-}
-
 export default function TransactionsPage() {
   const { tenant } = useAuth()
   const { addToast } = useToast()
-  const boletoPhotoInputRef = useRef<HTMLInputElement | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -554,7 +380,6 @@ export default function TransactionsPage() {
   const [deleting, setDeleting] = useState(false)
   const [paymentConfirm, setPaymentConfirm] = useState<{ open: boolean; tx: Transaction | null; nextPaid: boolean }>({ open: false, tx: null, nextPaid: false })
   const [updatingPayment, setUpdatingPayment] = useState(false)
-  const [photoScanning, setPhotoScanning] = useState(false)
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([])
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [editForm, setEditForm] = useState<{ amount: string; cardBrand: string; customCardBrand: string; dueMonth: string }>({
@@ -818,7 +643,7 @@ export default function TransactionsPage() {
   }
 
   function applyScannedCode(rawValue: string, mode: 'qr' | 'barcode' = 'barcode') {
-    const scanned = String(rawValue || '').trim()
+    const scanned = normalizeScannedText(rawValue)
     const digits = scanned.replace(/\D/g, '')
     const isBarcode = digits.length === 44 || digits.length === 47 || (digits.length === 48 && digits.startsWith('8'))
 
@@ -920,7 +745,7 @@ export default function TransactionsPage() {
   }, [transactions])
 
   function handleParseBusinessCode() {
-    const parsed = parsePaymentCode(form.businessDocCode || form.businessPixCopy)
+    const parsed = parsePaymentCode(normalizeScannedText(form.businessDocCode || form.businessPixCopy))
 
     setForm((prev) => ({
       ...prev,
@@ -937,56 +762,8 @@ export default function TransactionsPage() {
     }
   }
 
-  function openBoletoPhotoPicker() {
-    boletoPhotoInputRef.current?.click()
-  }
-
-  async function handleBoletoPhotoSelected(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
-
-    setPhotoScanning(true)
-    try {
-      const [decodedResult, dueDateResult, digitsResult] = await Promise.allSettled([
-        decodeBoletoFromPhoto(file),
-        extractDueDateFromPhoto(file),
-        extractBoletoDigitsFromPhoto(file),
-      ])
-
-      const decoded = decodedResult.status === 'fulfilled' ? decodedResult.value : ''
-      const dueDate = dueDateResult.status === 'fulfilled' ? dueDateResult.value : undefined
-      const fallbackDigits = digitsResult.status === 'fulfilled' ? digitsResult.value : undefined
-
-      if (decoded) {
-        applyBusinessCode(decoded, dueDate ? 'Foto do boleto lida e vencimento identificado.' : 'Foto do boleto lida com sucesso.', dueDate)
-        return
-      }
-
-      if (fallbackDigits) {
-        applyBusinessCode(fallbackDigits, dueDate ? 'Foto do boleto lida e vencimento identificado.' : 'Foto do boleto lida com sucesso.', dueDate)
-        return
-      }
-
-      if (dueDate) {
-        setForm((prev) => ({
-          ...prev,
-          businessDueDate: dueDate,
-        }))
-        addToast('Encontrei o vencimento na foto, mas nao consegui ler o codigo de barras.', 'warning')
-        return
-      }
-
-      throw new Error('foto_nao_lida')
-    } catch {
-      addToast('Nao consegui ler a foto. Tente deixar o boleto inteiro na imagem e tire outra foto mais focada.', 'warning')
-    } finally {
-      setPhotoScanning(false)
-    }
-  }
-
   function applyBusinessCode(rawCode: string, successMessage = 'Codigo aplicado com sucesso.', dueDateOverride?: string) {
-    const cleaned = String(rawCode || '').trim().replace(/\s+/g, '')
+    const cleaned = normalizeScannedText(rawCode).replace(/\s+/g, '')
     const digits = cleaned.replace(/\D/g, '')
     const parsed = parsePaymentCode(cleaned)
 
@@ -1483,26 +1260,6 @@ export default function TransactionsPage() {
                 >
                   Validar codigo colado
                 </button>
-              </div>
-              <div className="flex items-end">
-                <button
-                  type="button"
-                  onClick={openBoletoPhotoPicker}
-                  className="w-full rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-500/20"
-                >
-                  {photoScanning ? 'Lendo foto...' : 'Tirar foto do boleto'}
-                </button>
-                <input
-                  ref={boletoPhotoInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handleBoletoPhotoSelected}
-                  className="hidden"
-                />
-              </div>
-              <div className="col-span-2 md:col-span-6 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
-                Na foto, priorize a parte de baixo do boleto, onde ficam as barras e os números. Se possível, deixe a faixa do código bem nítida e ocupe quase toda a largura da imagem.
               </div>
               <div className="flex items-end">
                 <button
