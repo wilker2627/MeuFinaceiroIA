@@ -7,7 +7,6 @@ import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { BrowserMultiFormatReader } from '@zxing/browser'
 import { BarcodeFormat, DecodeHintType } from '@zxing/library'
-import { recognize } from 'tesseract.js'
 import { Plus, Trash2, Search, CreditCard, Wallet, QrCode, Loader, ChevronDown, ChevronRight, PencilLine } from 'lucide-react'
 import ConfirmModal from '@/components/ConfirmModal'
 import EmptyState, { LoadingSkeleton } from '@/components/EmptyState'
@@ -472,6 +471,7 @@ async function decodeBoletoFromPhoto(file: File) {
 }
 
 async function extractDueDateFromPhoto(file: File) {
+  const { recognize } = await import('tesseract.js')
   const attempts: ScanVariant[] = [
     { rotationDeg: 0, cropTopRatio: 0.45, cropHeightRatio: 0.45, scale: 3, threshold: 168 },
     { rotationDeg: 0, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3, threshold: 166 },
@@ -495,6 +495,7 @@ async function extractDueDateFromPhoto(file: File) {
 }
 
 async function extractBoletoDigitsFromPhoto(file: File) {
+  const { recognize } = await import('tesseract.js')
   const attempts: ScanVariant[] = [
     { rotationDeg: 0, cropTopRatio: 0.45, cropHeightRatio: 0.42, scale: 4, threshold: 172 },
     { rotationDeg: 0, cropTopRatio: 0.38, cropHeightRatio: 0.48, scale: 4, threshold: 168 },
