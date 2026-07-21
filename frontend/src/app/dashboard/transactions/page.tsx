@@ -308,6 +308,66 @@ function formatInvoiceMonth(monthKey: string) {
   return new Date(year, month - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
 }
 
+function waitForImageLoad(image: HTMLImageElement) {
+  return new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve()
+    image.onerror = () => reject(new Error('image_load_failed'))
+  })
+}
+
+async function buildScanDataUrl(file: File, rotationDeg: number) {
+  const image = new Image()
+  image.src = URL.createObjectURL(file)
+  try {
+    await waitForImageLoad(image)
+
+    const naturalWidth = image.naturalWidth || image.width
+    const naturalHeight = image.naturalHeight || image.height
+    const swapDimensions = rotationDeg === 90 || rotationDeg === 270
+    const canvasWidth = swapDimensions ? naturalHeight : naturalWidth
+    const canvasHeight = swapDimensions ? naturalWidth : naturalHeight
+
+    const canvas = document.createElement('canvas')
+    canvas.width = canvasWidth
+    canvas.height = canvasHeight
+
+    const context = canvas.getContext('2d')
+    if (!context) throw new Error('canvas_unavailable')
+
+    context.save()
+    context.translate(canvasWidth / 2, canvasHeight / 2)
+    context.rotate((rotationDeg * Math.PI) / 180)
+    context.drawImage(image, -naturalWidth / 2, -naturalHeight / 2, naturalWidth, naturalHeight)
+    context.restore()
+
+    return canvas.toDataURL('image/png')
+  } finally {
+    URL.revokeObjectURL(image.src)
+  }
+}
+
+async function decodeBoletoFromPhoto(file: File) {
+  const hints = new Map()
+  hints.set(DecodeHintType.POSSIBLE_FORMATS, BARCODE_SCAN_FORMATS)
+  hints.set(DecodeHintType.TRY_HARDER, true)
+
+  const reader = new BrowserMultiFormatReader(hints)
+  const attempts = [0, 90, 270]
+
+  for (const rotation of attempts) {
+    try {
+      const dataUrl = await buildScanDataUrl(file, rotation)
+      const result = await reader.decodeFromImageUrl(dataUrl)
+      const text = String(result.getText() || '').trim()
+      if (text) return text
+    } catch {
+      // Keep trying the next orientation.
+    }
+  }
+
+  throw new Error('bolet_photo_decode_failed')
+}
+
 export default function TransactionsPage() {
   const { tenant } = useAuth()
   const { addToast } = useToast()
@@ -736,13 +796,10 @@ export default function TransactionsPage() {
 
     setPhotoScanning(true)
     try {
-      const objectUrl = URL.createObjectURL(file)
-      const reader = new BrowserMultiFormatReader(new Map([[DecodeHintType.POSSIBLE_FORMATS, BARCODE_SCAN_FORMATS]]))
-      const result = await reader.decodeFromImageUrl(objectUrl)
-      URL.revokeObjectURL(objectUrl)
-      applyBusinessCode(result.getText(), 'Foto do boleto lida com sucesso.')
+      const decoded = await decodeBoletoFromPhoto(file)
+      applyBusinessCode(decoded, 'Foto do boleto lida com sucesso.')
     } catch {
-      addToast('Nao consegui ler a foto. Tente aproximar, focar nas barras e tirar outra foto.', 'warning')
+      addToast('Nao consegui ler a foto. Tente deixar o boleto inteiro na imagem e tire outra foto mais focada.', 'warning')
     } finally {
       setPhotoScanning(false)
     }
