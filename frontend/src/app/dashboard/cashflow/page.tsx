@@ -7,6 +7,7 @@ import AnimatedCurrency from '@/components/AnimatedCurrency'
 import { BarChart3, ChartColumnIncreasing, PieChart, Users } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { useAuth } from '@/contexts/AuthContext'
+import { jsPDF } from 'jspdf'
 
 type BusinessMonthReport = {
   monthKey: string
@@ -27,7 +28,65 @@ export default function CashFlowPage() {
   const [teamReport, setTeamReport] = useState<any>(null)
   const [businessMonths, setBusinessMonths] = useState<BusinessMonthReport[]>([])
   const [loading, setLoading] = useState(true)
+  const [exportingPdf, setExportingPdf] = useState(false)
   const panelClass = 'dashboard-panel rounded-2xl border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.45)]'
+
+  function exportBusinessPdf() {
+    if (businessMonths.length === 0) return
+
+    setExportingPdf(true)
+    try {
+      const doc = new jsPDF({ unit: 'pt', format: 'a4' })
+      let y = 42
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(16)
+      doc.text('Relatorio Contas Pagas - Empresa', 40, y)
+
+      y += 22
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(10)
+      doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 40, y)
+
+      y += 20
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10)
+      doc.text('Mes', 40, y)
+      doc.text('Pagos', 160, y)
+      doc.text('Total pago', 220, y)
+      doc.text('A pagar', 340, y)
+      doc.text('Vencidos', 430, y)
+      doc.line(40, y + 6, 560, y + 6)
+
+      const rows = businessMonths.slice().reverse()
+      doc.setFont('helvetica', 'normal')
+      rows.forEach((month) => {
+        y += 18
+        if (y > 790) {
+          doc.addPage()
+          y = 42
+          doc.setFont('helvetica', 'bold')
+          doc.text('Mes', 40, y)
+          doc.text('Pagos', 160, y)
+          doc.text('Total pago', 220, y)
+          doc.text('A pagar', 340, y)
+          doc.text('Vencidos', 430, y)
+          doc.line(40, y + 6, 560, y + 6)
+          doc.setFont('helvetica', 'normal')
+          y += 18
+        }
+
+        doc.text(month.label, 40, y)
+        doc.text(String(month.paidCount), 160, y)
+        doc.text(formatCurrency(month.paidTotal), 220, y)
+        doc.text(String(month.pendingCount), 340, y)
+        doc.text(String(month.overdueCount), 430, y)
+      })
+
+      doc.save(`relatorio-contas-pagas-${new Date().toISOString().slice(0, 10)}.pdf`)
+    } finally {
+      setExportingPdf(false)
+    }
+  }
 
   function monthKeyFromOffset(offset: number) {
     const date = new Date()
@@ -111,6 +170,16 @@ export default function CashFlowPage() {
           <div>
             <h1 className="text-2xl md:text-3xl font-black text-white">Contas Pagas</h1>
             <p className="text-slate-400 text-sm mt-1">Acompanhe pagamentos e histórico mensal de contas da empresa.</p>
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={exportBusinessPdf}
+                disabled={exportingPdf || businessMonths.length === 0}
+                className="rounded-lg border border-cyan-400/35 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50"
+              >
+                {exportingPdf ? 'Exportando PDF...' : 'Exportar relatorio PDF'}
+              </button>
+            </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-4">
