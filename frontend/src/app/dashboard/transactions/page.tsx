@@ -394,22 +394,6 @@ export default function TransactionsPage() {
         throw new Error('Este dispositivo nao suporta acesso a camera.')
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' }
-        },
-        audio: false
-      })
-
-      streamRef.current = stream
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-      }
-
-      setScannerLoading(false)
-
       const reader = new BrowserMultiFormatReader()
 
       const videoElement = videoRef.current
@@ -436,6 +420,7 @@ export default function TransactionsPage() {
           }
         }
       )
+      setScannerLoading(false)
     } catch (err: any) {
       setScannerLoading(false)
       setScannerError(err?.message || 'Nao foi possivel abrir a camera.')
