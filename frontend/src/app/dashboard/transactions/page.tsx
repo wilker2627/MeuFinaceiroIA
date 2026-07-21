@@ -204,6 +204,19 @@ function convertLinhaDigitavel48ToBarcode(line: string) {
   return `${line.slice(0, 11)}${line.slice(12, 23)}${line.slice(24, 35)}${line.slice(36, 47)}`
 }
 
+function formatArrecadacaoLineDigitavel(barcode: string) {
+  if (!/^\d{44}$/.test(barcode) || !barcode.startsWith('8')) return undefined
+
+  const ref = barcode[2]
+  const dvFn = ['6', '7'].includes(ref) ? modulo10 : modulo11Arrecadacao
+  const block1 = barcode.slice(0, 11)
+  const block2 = barcode.slice(11, 22)
+  const block3 = barcode.slice(22, 33)
+  const block4 = barcode.slice(33, 44)
+
+  return `${block1} ${dvFn(block1)} ${block2} ${dvFn(block2)} ${block3} ${dvFn(block3)} ${block4} ${dvFn(block4)}`
+}
+
 function convertBarcode44ToLinhaDigitavel47(barcode: string) {
   if (!/^\d{44}$/.test(barcode) || barcode.startsWith('8')) return undefined
 
@@ -268,7 +281,9 @@ function parsePaymentCode(rawCode: string): { amount?: number; dueDate?: string;
   if (digits.length === 44) {
     if (!validateBoleto44(digits)) return {}
     barcode = digits
-    lineCode = convertBarcode44ToLinhaDigitavel47(digits)
+    lineCode = digits.startsWith('8')
+      ? formatArrecadacaoLineDigitavel(digits)
+      : convertBarcode44ToLinhaDigitavel47(digits)
   } else if (digits.length === 47) {
     if (!validateLinhaDigitavel47(digits)) return {}
     barcode = convertLinhaDigitavel47ToBarcode(digits)
@@ -324,6 +339,27 @@ function parseDateFromText(text: string) {
   if (matches.length > 0) {
     const [, day, month, year] = matches[matches.length - 1]
     return `${year}-${month}-${day}`
+  }
+
+  return undefined
+}
+
+function findValidBoletoDigitsFromText(text: string) {
+  const compact = String(text || '').replace(/\D/g, '')
+  if (!compact) return undefined
+
+  const lengths = [48, 47, 44]
+  for (const length of lengths) {
+    if (compact.length === length) {
+      const parsed = parsePaymentCode(compact)
+      if (parsed.normalizedCode) return compact
+    }
+
+    for (let index = 0; index + length <= compact.length; index += 1) {
+      const candidate = compact.slice(index, index + length)
+      const parsed = parsePaymentCode(candidate)
+      if (parsed.normalizedCode) return candidate
+    }
   }
 
   return undefined
@@ -450,6 +486,31 @@ async function extractDueDateFromPhoto(file: File) {
       const result = await recognize(dataUrl, 'por')
       const dueDate = parseDateFromText(result.data?.text || '')
       if (dueDate) return dueDate
+    } catch {
+      // Keep trying the next OCR variant.
+    }
+  }
+
+  return undefined
+}
+
+async function extractBoletoDigitsFromPhoto(file: File) {
+  const attempts: ScanVariant[] = [
+    { rotationDeg: 0, scale: 2 },
+    { rotationDeg: 0, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3, threshold: 168 },
+    { rotationDeg: 0, cropTopRatio: 0.45, cropHeightRatio: 0.4, scale: 3, threshold: 165 },
+    { rotationDeg: 90, scale: 2 },
+    { rotationDeg: 270, scale: 2 },
+    { rotationDeg: 90, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3, threshold: 165 },
+    { rotationDeg: 270, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3, threshold: 165 },
+  ]
+
+  for (const variant of attempts) {
+    try {
+      const dataUrl = await buildScanDataUrl(file, variant)
+      const result = await recognize(dataUrl, 'por')
+      const digits = findValidBoletoDigitsFromText(result.data?.text || '')
+      if (digits) return digits
     } catch {
       // Keep trying the next OCR variant.
     }
@@ -886,16 +947,23 @@ export default function TransactionsPage() {
 
     setPhotoScanning(true)
     try {
-      const [decodedResult, dueDateResult] = await Promise.allSettled([
+      const [decodedResult, dueDateResult, digitsResult] = await Promise.allSettled([
         decodeBoletoFromPhoto(file),
         extractDueDateFromPhoto(file),
+        extractBoletoDigitsFromPhoto(file),
       ])
 
       const decoded = decodedResult.status === 'fulfilled' ? decodedResult.value : ''
       const dueDate = dueDateResult.status === 'fulfilled' ? dueDateResult.value : undefined
+      const fallbackDigits = digitsResult.status === 'fulfilled' ? digitsResult.value : undefined
 
       if (decoded) {
         applyBusinessCode(decoded, dueDate ? 'Foto do boleto lida e vencimento identificado.' : 'Foto do boleto lida com sucesso.', dueDate)
+        return
+      }
+
+      if (fallbackDigits) {
+        applyBusinessCode(fallbackDigits, dueDate ? 'Foto do boleto lida e vencimento identificado.' : 'Foto do boleto lida com sucesso.', dueDate)
         return
       }
 
