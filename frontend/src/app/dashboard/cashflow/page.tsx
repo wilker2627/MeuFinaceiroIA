@@ -2,12 +2,21 @@
 
 import { useEffect, useState } from 'react'
 import api from '@/lib/api'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import AnimatedCurrency from '@/components/AnimatedCurrency'
 import { BarChart3, ChartColumnIncreasing, PieChart, Users } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import { useAuth } from '@/contexts/AuthContext'
 import { jsPDF } from 'jspdf'
+
+type BusinessReportTransaction = {
+  id: string
+  description: string
+  amount: number
+  dueDate?: string
+  date?: string
+  paymentMethod?: string
+}
 
 type BusinessMonthReport = {
   monthKey: string
@@ -18,6 +27,23 @@ type BusinessMonthReport = {
   pendingTotal: number
   overdueCount: number
   overdueTotal: number
+  paidItems: BusinessReportTransaction[]
+  pendingItems: BusinessReportTransaction[]
+  overdueItems: BusinessReportTransaction[]
+}
+
+const CARD_TAG_REGEX = /\|\s*Cartao:\s*([^|]+)/i
+const PERSON_TAG_REGEX = /\|\s*Pessoa:\s*(.+)$/i
+const DOC_CODE_TAG_REGEX = /\|\s*DocCode:\s*([^|]+)/i
+const PIX_COPY_TAG_REGEX = /\|\s*Pix:\s*([^|]+)/i
+
+function cleanBusinessDescription(description: string) {
+  return String(description || '')
+    .replace(CARD_TAG_REGEX, '')
+    .replace(PERSON_TAG_REGEX, '')
+    .replace(DOC_CODE_TAG_REGEX, '')
+    .replace(PIX_COPY_TAG_REGEX, '')
+    .trim()
 }
 
 export default function CashFlowPage() {
@@ -27,12 +53,16 @@ export default function CashFlowPage() {
   const [categories, setCategories] = useState<any[]>([])
   const [teamReport, setTeamReport] = useState<any>(null)
   const [businessMonths, setBusinessMonths] = useState<BusinessMonthReport[]>([])
+  const [selectedBusinessMonth, setSelectedBusinessMonth] = useState('')
   const [loading, setLoading] = useState(true)
   const [exportingPdf, setExportingPdf] = useState(false)
   const panelClass = 'dashboard-panel rounded-2xl border border-cyan-500/20 bg-slate-900/75 backdrop-blur-xl shadow-[0_12px_40px_rgba(2,8,23,0.45)]'
 
-  function exportBusinessPdf() {
-    if (businessMonths.length === 0) return
+  function exportBusinessPdf(monthKey: string) {
+    const month = businessMonths.find((item) => item.monthKey === monthKey)
+    if (!month) return
+
+    const allItems = [...month.paidItems, ...month.pendingItems, ...month.overdueItems]
 
     setExportingPdf(true)
     try {
@@ -40,49 +70,72 @@ export default function CashFlowPage() {
       let y = 42
       doc.setFont('helvetica', 'bold')
       doc.setFontSize(16)
-      doc.text('Relatorio Contas Pagas - Empresa', 40, y)
+      doc.text(`Relatorio Completo - ${month.label}`, 40, y)
 
       y += 22
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(10)
       doc.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 40, y)
+      y += 16
+      doc.text(`Lancamentos no mes: ${allItems.length}`, 40, y)
 
       y += 20
       doc.setFont('helvetica', 'bold')
-      doc.setFontSize(10)
-      doc.text('Mes', 40, y)
-      doc.text('Pagos', 160, y)
-      doc.text('Total pago', 220, y)
-      doc.text('A pagar', 340, y)
-      doc.text('Vencidos', 430, y)
+      doc.text('Resumo', 40, y)
       doc.line(40, y + 6, 560, y + 6)
-
-      const rows = businessMonths.slice().reverse()
+      y += 20
       doc.setFont('helvetica', 'normal')
-      rows.forEach((month) => {
-        y += 18
-        if (y > 790) {
+      doc.text(`Pagos: ${month.paidCount} (${formatCurrency(month.paidTotal)})`, 40, y)
+      y += 15
+      doc.text(`Pendentes: ${month.pendingCount} (${formatCurrency(month.pendingTotal)})`, 40, y)
+      y += 15
+      doc.text(`Vencidos: ${month.overdueCount} (${formatCurrency(month.overdueTotal)})`, 40, y)
+
+      const sections: Array<{ title: string; items: BusinessReportTransaction[]; status: string }> = [
+        { title: 'Pagos', items: month.paidItems, status: 'Pago' },
+        { title: 'Pendentes', items: month.pendingItems, status: 'Pendente' },
+        { title: 'Vencidos', items: month.overdueItems, status: 'Vencido' },
+      ]
+
+      sections.forEach((section) => {
+        y += 24
+        if (y > 760) {
           doc.addPage()
           y = 42
-          doc.setFont('helvetica', 'bold')
-          doc.text('Mes', 40, y)
-          doc.text('Pagos', 160, y)
-          doc.text('Total pago', 220, y)
-          doc.text('A pagar', 340, y)
-          doc.text('Vencidos', 430, y)
-          doc.line(40, y + 6, 560, y + 6)
-          doc.setFont('helvetica', 'normal')
-          y += 18
+        }
+        doc.setFont('helvetica', 'bold')
+        doc.text(`${section.title} (${section.items.length})`, 40, y)
+        doc.setFont('helvetica', 'normal')
+
+        if (section.items.length === 0) {
+          y += 15
+          doc.text('Nenhum lancamento.', 40, y)
+          return
         }
 
-        doc.text(month.label, 40, y)
-        doc.text(String(month.paidCount), 160, y)
-        doc.text(formatCurrency(month.paidTotal), 220, y)
-        doc.text(String(month.pendingCount), 340, y)
-        doc.text(String(month.overdueCount), 430, y)
+        section.items.forEach((tx) => {
+          const due = formatDate(tx.dueDate || tx.date || '')
+          const description = cleanBusinessDescription(tx.description)
+          const wrappedDescription = doc.splitTextToSize(description || 'Sem descricao', 370)
+
+          if (y > 740) {
+            doc.addPage()
+            y = 42
+          }
+
+          y += 16
+          doc.text(due, 40, y)
+          doc.text(section.status, 130, y)
+          doc.text(formatCurrency(Number(tx.amount || 0)), 500, y, { align: 'right' })
+          y += 13
+          doc.text(wrappedDescription, 130, y)
+          y += Math.max(10, wrappedDescription.length * 10)
+          doc.setDrawColor(210, 214, 220)
+          doc.line(40, y, 560, y)
+        })
       })
 
-      doc.save(`relatorio-contas-pagas-${new Date().toISOString().slice(0, 10)}.pdf`)
+      doc.save(`relatorio-completo-${month.monthKey}.pdf`)
     } finally {
       setExportingPdf(false)
     }
@@ -116,6 +169,15 @@ export default function CashFlowPage() {
           const pending = pendingRes.data?.transactions || []
           const overdue = overdueRes.data?.transactions || []
 
+          const normalizeTransactions = (items: any[]) => items.map((tx) => ({
+            id: tx.id,
+            description: String(tx.description || ''),
+            amount: Number(tx.amount || 0),
+            dueDate: tx.dueDate,
+            date: tx.date,
+            paymentMethod: tx.paymentMethod,
+          }))
+
           return {
             monthKey,
             label: monthLabel(monthKey),
@@ -125,10 +187,14 @@ export default function CashFlowPage() {
             pendingTotal: pending.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0),
             overdueCount: overdue.length,
             overdueTotal: overdue.reduce((sum: number, tx: any) => sum + Number(tx.amount || 0), 0),
+            paidItems: normalizeTransactions(paid),
+            pendingItems: normalizeTransactions(pending),
+            overdueItems: normalizeTransactions(overdue),
           }
         }))
 
         setBusinessMonths(reports)
+        setSelectedBusinessMonth((prev) => prev || reports[reports.length - 1]?.monthKey || '')
         setLoading(false)
         return
       }
@@ -170,14 +236,23 @@ export default function CashFlowPage() {
           <div>
             <h1 className="text-2xl md:text-3xl font-black text-white">Contas Pagas</h1>
             <p className="text-slate-400 text-sm mt-1">Acompanhe pagamentos e histórico mensal de contas da empresa.</p>
-            <div className="mt-3">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <select
+                value={selectedBusinessMonth}
+                onChange={(e) => setSelectedBusinessMonth(e.target.value)}
+                className="rounded-lg border border-cyan-500/20 bg-slate-950 px-3 py-2 text-sm text-white"
+              >
+                {businessMonths.slice().reverse().map((month) => (
+                  <option key={month.monthKey} value={month.monthKey}>{month.label}</option>
+                ))}
+              </select>
               <button
                 type="button"
-                onClick={exportBusinessPdf}
-                disabled={exportingPdf || businessMonths.length === 0}
+                onClick={() => exportBusinessPdf(selectedBusinessMonth)}
+                disabled={exportingPdf || businessMonths.length === 0 || !selectedBusinessMonth}
                 className="rounded-lg border border-cyan-400/35 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50"
               >
-                {exportingPdf ? 'Exportando PDF...' : 'Exportar relatorio PDF'}
+                {exportingPdf ? 'Exportando PDF...' : 'Exportar mes selecionado (completo)'}
               </button>
             </div>
           </div>
@@ -200,6 +275,7 @@ export default function CashFlowPage() {
                     <th className="text-right py-2">Total pago</th>
                     <th className="text-right py-2">A pagar</th>
                     <th className="text-right py-2">Vencidos</th>
+                    <th className="text-right py-2">Relatorio</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -210,6 +286,16 @@ export default function CashFlowPage() {
                       <td className="py-3 text-right text-emerald-300">{formatCurrency(month.paidTotal)}</td>
                       <td className="py-3 text-right text-amber-300">{month.pendingCount}</td>
                       <td className="py-3 text-right text-rose-300">{month.overdueCount}</td>
+                      <td className="py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => exportBusinessPdf(month.monthKey)}
+                          disabled={exportingPdf}
+                          className="rounded-md border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50"
+                        >
+                          Exportar PDF
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

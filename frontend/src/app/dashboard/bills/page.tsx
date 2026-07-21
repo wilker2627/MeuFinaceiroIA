@@ -6,6 +6,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
 import { CreditCard, Loader, Plus, CalendarDays } from 'lucide-react'
 import { triggerDashboardRefresh } from '@/lib/dashboardRefresh'
+import ConfirmModal from '@/components/ConfirmModal'
 
 interface BillTransaction {
   id: string
@@ -90,6 +91,12 @@ export default function BillsPage() {
   const [bills, setBills] = useState<BillMonth[]>([])
   const [accounts, setAccounts] = useState<any[]>([])
   const [paying, setPaying] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [itemConfirm, setItemConfirm] = useState<{ open: boolean; mode: 'PAY' | 'UNPAY' | 'DELETE' | null; item: BillTransaction | null }>({
+    open: false,
+    mode: null,
+    item: null,
+  })
   const [selectedAccountId, setSelectedAccountId] = useState('')
   const [editingBillItem, setEditingBillItem] = useState<BillTransaction | null>(null)
   const [editBillForm, setEditBillForm] = useState<{ amount: string; cardBrand: string; customCardBrand: string; dueMonth: string }>({
@@ -240,7 +247,12 @@ export default function BillsPage() {
     }
   }
 
-  async function handlePayBillItem(item: BillTransaction) {
+  async function handlePayBillItem(item: BillTransaction, confirmed = false) {
+    if (!confirmed) {
+      setItemConfirm({ open: true, mode: 'PAY', item })
+      return
+    }
+
     if (item.isPaid) {
       addToast('Esse item da fatura ja esta pago.', 'error')
       return
@@ -254,6 +266,7 @@ export default function BillsPage() {
       })
 
       addToast(`${data?.message || 'Item da fatura pago com sucesso.'} Total: ${formatCurrency(Number(data?.total || item.amount || 0))}`, 'success')
+      setItemConfirm({ open: false, mode: null, item: null })
       await loadBills()
       triggerDashboardRefresh()
     } catch (error: any) {
@@ -263,7 +276,12 @@ export default function BillsPage() {
     }
   }
 
-  async function handleUnpayBillItem(item: BillTransaction) {
+  async function handleUnpayBillItem(item: BillTransaction, confirmed = false) {
+    if (!confirmed) {
+      setItemConfirm({ open: true, mode: 'UNPAY', item })
+      return
+    }
+
     if (!item.isPaid) {
       addToast('Esse item da fatura ja esta pendente.', 'error')
       return
@@ -276,6 +294,7 @@ export default function BillsPage() {
       })
 
       addToast(`Item da fatura marcado como pendente com sucesso. Total: ${formatCurrency(Number(item.amount || 0))}`, 'success')
+      setItemConfirm({ open: false, mode: null, item: null })
       await loadBills()
       triggerDashboardRefresh()
     } catch (error: any) {
@@ -285,18 +304,40 @@ export default function BillsPage() {
     }
   }
 
-  async function handleDeleteBillItem(item: BillTransaction) {
-    const confirmed = window.confirm('Tem certeza que deseja excluir este item da fatura?')
-    if (!confirmed) return
+  async function handleDeleteBillItem(item: BillTransaction, confirmed = false) {
+    if (!confirmed) {
+      setItemConfirm({ open: true, mode: 'DELETE', item })
+      return
+    }
 
+    setDeleting(true)
     try {
       await api.delete(`/dashboard/transactions/${item.id}`)
       addToast('Item da fatura removido com sucesso.', 'success')
+      setItemConfirm({ open: false, mode: null, item: null })
       await loadBills()
       triggerDashboardRefresh()
     } catch (error: any) {
       addToast(error?.response?.data?.error || 'Nao foi possivel excluir este item.', 'error')
+    } finally {
+      setDeleting(false)
     }
+  }
+
+  async function handleConfirmItemAction() {
+    const mode = itemConfirm.mode
+    const item = itemConfirm.item
+    if (!mode || !item) return
+
+    if (mode === 'PAY') {
+      await handlePayBillItem(item, true)
+      return
+    }
+    if (mode === 'UNPAY') {
+      await handleUnpayBillItem(item, true)
+      return
+    }
+    await handleDeleteBillItem(item, true)
   }
 
   function openEditBillItem(item: BillTransaction) {
@@ -691,6 +732,32 @@ export default function BillsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={itemConfirm.open}
+        title={
+          itemConfirm.mode === 'PAY'
+            ? 'Marcar como Pago'
+            : itemConfirm.mode === 'UNPAY'
+              ? 'Marcar como Pendente'
+              : 'Excluir Lançamento'
+        }
+        message={itemConfirm.item
+          ? (
+            itemConfirm.mode === 'PAY'
+              ? `Deseja marcar como pago o lançamento "${cleanDescription(itemConfirm.item.description)}"?`
+              : itemConfirm.mode === 'UNPAY'
+                ? `Deseja marcar como pendente o lançamento "${cleanDescription(itemConfirm.item.description)}"?`
+                : `Deseja excluir o lançamento "${cleanDescription(itemConfirm.item.description)}"? Esta acao nao pode ser desfeita.`
+          )
+          : 'Deseja confirmar esta ação?'}
+        confirmText="Sim"
+        cancelText="Não"
+        isDestructive={itemConfirm.mode === 'DELETE'}
+        isLoading={paying || deleting}
+        onConfirm={handleConfirmItemAction}
+        onCancel={() => setItemConfirm({ open: false, mode: null, item: null })}
+      />
     </div>
   )
 }
