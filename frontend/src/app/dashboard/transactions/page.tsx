@@ -473,9 +473,9 @@ async function decodeBoletoFromPhoto(file: File) {
 
 async function extractDueDateFromPhoto(file: File) {
   const attempts: ScanVariant[] = [
-    { rotationDeg: 0, scale: 2 },
-    { rotationDeg: 0, cropTopRatio: 0.02, cropHeightRatio: 0.58, scale: 3, threshold: 168 },
-    { rotationDeg: 0, cropTopRatio: 0.12, cropHeightRatio: 0.48, scale: 3, threshold: 165 },
+    { rotationDeg: 0, cropTopRatio: 0.45, cropHeightRatio: 0.45, scale: 3, threshold: 168 },
+    { rotationDeg: 0, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3, threshold: 166 },
+    { rotationDeg: 0, cropTopRatio: 0.2, cropHeightRatio: 0.6, scale: 2 },
     { rotationDeg: 90, scale: 2 },
     { rotationDeg: 270, scale: 2 },
   ]
@@ -496,9 +496,9 @@ async function extractDueDateFromPhoto(file: File) {
 
 async function extractBoletoDigitsFromPhoto(file: File) {
   const attempts: ScanVariant[] = [
-    { rotationDeg: 0, scale: 2 },
-    { rotationDeg: 0, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3, threshold: 168 },
-    { rotationDeg: 0, cropTopRatio: 0.45, cropHeightRatio: 0.4, scale: 3, threshold: 165 },
+    { rotationDeg: 0, cropTopRatio: 0.45, cropHeightRatio: 0.42, scale: 4, threshold: 172 },
+    { rotationDeg: 0, cropTopRatio: 0.38, cropHeightRatio: 0.48, scale: 4, threshold: 168 },
+    { rotationDeg: 0, cropTopRatio: 0.25, cropHeightRatio: 0.6, scale: 3 },
     { rotationDeg: 90, scale: 2 },
     { rotationDeg: 270, scale: 2 },
     { rotationDeg: 90, cropTopRatio: 0.35, cropHeightRatio: 0.5, scale: 3, threshold: 165 },
@@ -1499,6 +1499,9 @@ export default function TransactionsPage() {
                   onChange={handleBoletoPhotoSelected}
                   className="hidden"
                 />
+              </div>
+              <div className="col-span-2 md:col-span-6 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">
+                Na foto, priorize a parte de baixo do boleto, onde ficam as barras e os números. Se possível, deixe a faixa do código bem nítida e ocupe quase toda a largura da imagem.
               </div>
               <div className="flex items-end">
                 <button
