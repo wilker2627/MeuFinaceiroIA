@@ -313,6 +313,70 @@ export default function TransactionsPage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!scannerOpen) return
+
+    let cancelled = false
+
+    async function startScannerAfterMount() {
+      setScannerLoading(true)
+      setScannerError('')
+      setScannerMessage('Posicione o QR Code ou codigo de barras dentro da camera.')
+
+      try {
+        if (!navigator?.mediaDevices?.getUserMedia) {
+          throw new Error('Este dispositivo nao suporta acesso a camera.')
+        }
+
+        // Wait for the camera modal/video element to be mounted before binding ZXing.
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+
+        if (cancelled) return
+
+        const videoElement = videoRef.current
+        if (!videoElement) {
+          throw new Error('Nao foi possivel inicializar a camera.')
+        }
+
+        const reader = new BrowserMultiFormatReader()
+        scannerControlsRef.current = await reader.decodeFromVideoDevice(
+          undefined,
+          videoElement,
+          (result, error) => {
+            if (result) {
+              const rawValue = String(result.getText()).trim()
+              if (rawValue) {
+                applyScannedCode(rawValue)
+                setScannerOpen(false)
+                stopScanner()
+                return
+              }
+            }
+
+            if (error && String(error?.name || '') !== 'NotFoundException') {
+              setScannerError('Nao foi possivel ler a camera. Tente aproximar o codigo ou usar colar manualmente.')
+            }
+          }
+        )
+
+        if (!cancelled) setScannerLoading(false)
+      } catch (err: any) {
+        if (!cancelled) {
+          setScannerLoading(false)
+          setScannerError(err?.message || 'Nao foi possivel abrir a camera.')
+          stopScanner()
+        }
+      }
+    }
+
+    startScannerAfterMount()
+
+    return () => {
+      cancelled = true
+    }
+  }, [scannerOpen])
+
   function stopScanner() {
     if (scanTimerRef.current !== null) {
       window.clearTimeout(scanTimerRef.current)
@@ -385,47 +449,6 @@ export default function TransactionsPage() {
 
   async function openCameraScanner() {
     setScannerOpen(true)
-    setScannerLoading(true)
-    setScannerError('')
-    setScannerMessage('Posicione o QR Code ou codigo de barras dentro da camera.')
-
-    try {
-      if (!navigator?.mediaDevices?.getUserMedia) {
-        throw new Error('Este dispositivo nao suporta acesso a camera.')
-      }
-
-      const reader = new BrowserMultiFormatReader()
-
-      const videoElement = videoRef.current
-      if (!videoElement) {
-        throw new Error('Nao foi possivel inicializar a camera.')
-      }
-
-      scannerControlsRef.current = await reader.decodeFromVideoDevice(
-        undefined,
-        videoElement,
-        (result, error) => {
-          if (result) {
-            const rawValue = String(result.getText()).trim()
-            if (rawValue) {
-              applyScannedCode(rawValue)
-              setScannerOpen(false)
-              stopScanner()
-              return
-            }
-          }
-
-          if (error && String(error?.name || '') !== 'NotFoundException') {
-            setScannerError('Nao foi possivel ler a camera. Tente aproximar o codigo ou usar colar manualmente.')
-          }
-        }
-      )
-      setScannerLoading(false)
-    } catch (err: any) {
-      setScannerLoading(false)
-      setScannerError(err?.message || 'Nao foi possivel abrir a camera.')
-      stopScanner()
-    }
   }
 
   function closeCameraScanner() {
