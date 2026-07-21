@@ -360,30 +360,21 @@ export default function TransactionsPage() {
           throw new Error('Nao foi possivel inicializar a camera.')
         }
 
-        let preferredDeviceId: string | undefined
-        try {
-          // Prime labels and prefer rear camera on mobile devices.
-          const permissionStream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: { ideal: 'environment' } },
-            audio: false,
-          })
-          permissionStream.getTracks().forEach((track) => track.stop())
-
-          const devices = await navigator.mediaDevices.enumerateDevices()
-          const videoDevices = devices.filter((device) => device.kind === 'videoinput')
-          const rearDevice = videoDevices.find((device) => /back|rear|traseira|environment|externa/i.test(device.label || ''))
-          preferredDeviceId = rearDevice?.deviceId || videoDevices[videoDevices.length - 1]?.deviceId
-        } catch {
-          preferredDeviceId = undefined
-        }
-
         const hints = new Map()
         hints.set(DecodeHintType.POSSIBLE_FORMATS, scannerMode === 'qr' ? QR_SCAN_FORMATS : BARCODE_SCAN_FORMATS)
         hints.set(DecodeHintType.TRY_HARDER, true)
 
         const reader = new BrowserMultiFormatReader(hints)
-        scannerControlsRef.current = await reader.decodeFromVideoDevice(
-          preferredDeviceId,
+        scannerControlsRef.current = await reader.decodeFromConstraints(
+          {
+            audio: false,
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+              advanced: [{ focusMode: 'continuous' } as any]
+            }
+          },
           videoElement,
           (result, error) => {
             if (result) {
@@ -1108,7 +1099,7 @@ export default function TransactionsPage() {
             </div>
 
             <div className="rounded-2xl border border-slate-700 bg-black/60 p-2">
-              <video ref={videoRef} className="h-72 w-full rounded-xl bg-black object-cover" muted playsInline autoPlay />
+              <video ref={videoRef} className="h-72 w-full rounded-xl bg-black object-contain" muted playsInline autoPlay />
             </div>
 
             <p className="mt-3 text-sm text-slate-300">{scannerMessage}</p>
