@@ -22,11 +22,10 @@ const defaultNavItems = [
 ]
 
 const businessNavItems = [
-  { href: '/dashboard', label: 'Empresa', icon: LayoutDashboard },
-  { href: '/dashboard/transactions', label: 'Operações', icon: ArrowUpDown },
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/dashboard/transactions', label: 'Lançamentos', icon: ArrowUpDown },
   { href: '/dashboard/bills', label: 'Faturas', icon: ReceiptText },
-  { href: '/dashboard/cashflow', label: 'Fluxo de Caixa', icon: TrendingUp },
-  { href: '/dashboard/whatsapp', label: 'WhatsApp', icon: Menu },
+  { href: '/dashboard/cashflow', label: 'Relatórios', icon: TrendingUp },
   { href: '/dashboard/settings', label: 'Configuração', icon: Settings },
 ]
 
