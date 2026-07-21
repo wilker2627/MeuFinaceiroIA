@@ -122,6 +122,105 @@ function formatIsoDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
+function modulo10(value: string) {
+  let sum = 0
+  let factor = 2
+  for (let i = value.length - 1; i >= 0; i -= 1) {
+    const digit = Number(value[i])
+    let partial = digit * factor
+    if (partial > 9) partial = Math.floor(partial / 10) + (partial % 10)
+    sum += partial
+    factor = factor === 2 ? 1 : 2
+  }
+  const remainder = sum % 10
+  return remainder === 0 ? 0 : 10 - remainder
+}
+
+function modulo11BankingDAC(value: string) {
+  let sum = 0
+  let factor = 2
+  for (let i = value.length - 1; i >= 0; i -= 1) {
+    sum += Number(value[i]) * factor
+    factor = factor === 9 ? 2 : factor + 1
+  }
+  const remainder = sum % 11
+  const dac = 11 - remainder
+  if (dac === 0 || dac === 10 || dac === 11) return 1
+  return dac
+}
+
+function modulo11Arrecadacao(value: string) {
+  let sum = 0
+  let factor = 2
+  for (let i = value.length - 1; i >= 0; i -= 1) {
+    sum += Number(value[i]) * factor
+    factor = factor === 9 ? 2 : factor + 1
+  }
+  const remainder = sum % 11
+  if (remainder === 0 || remainder === 1) return 0
+  if (remainder === 10) return 1
+  return 11 - remainder
+}
+
+function validateBoleto44(barcode: string) {
+  if (!/^\d{44}$/.test(barcode)) return false
+
+  if (barcode.startsWith('8')) {
+    const ref = barcode[2]
+    const raw = `${barcode.slice(0, 3)}${barcode.slice(4)}`
+    const expected = ['6', '7'].includes(ref)
+      ? modulo10(raw)
+      : modulo11Arrecadacao(raw)
+    return Number(barcode[3]) === expected
+  }
+
+  const raw = `${barcode.slice(0, 4)}${barcode.slice(5)}`
+  const expected = modulo11BankingDAC(raw)
+  return Number(barcode[4]) === expected
+}
+
+function convertLinhaDigitavel47ToBarcode(line: string) {
+  return `${line.slice(0, 4)}${line.slice(32, 33)}${line.slice(33, 47)}${line.slice(4, 9)}${line.slice(10, 20)}${line.slice(21, 31)}`
+}
+
+function validateLinhaDigitavel47(line: string) {
+  if (!/^\d{47}$/.test(line)) return false
+
+  const field1 = line.slice(0, 9)
+  const field2 = line.slice(10, 20)
+  const field3 = line.slice(21, 31)
+
+  const ok1 = modulo10(field1) === Number(line[9])
+  const ok2 = modulo10(field2) === Number(line[20])
+  const ok3 = modulo10(field3) === Number(line[31])
+  if (!ok1 || !ok2 || !ok3) return false
+
+  const barcode = convertLinhaDigitavel47ToBarcode(line)
+  return validateBoleto44(barcode)
+}
+
+function convertLinhaDigitavel48ToBarcode(line: string) {
+  return `${line.slice(0, 11)}${line.slice(12, 23)}${line.slice(24, 35)}${line.slice(36, 47)}`
+}
+
+function validateLinhaDigitavel48(line: string) {
+  if (!/^\d{48}$/.test(line) || !line.startsWith('8')) return false
+  const ref = line[2]
+
+  for (let i = 0; i < 4; i += 1) {
+    const block = line.slice(i * 12, (i + 1) * 12)
+    const data = block.slice(0, 11)
+    const dac = Number(block[11])
+    const expected = ['6', '7'].includes(ref)
+      ? modulo10(data)
+      : modulo11Arrecadacao(data)
+    if (dac !== expected) return false
+  }
+
+  const barcode = convertLinhaDigitavel48ToBarcode(line)
+  return validateBoleto44(barcode)
+}
+
 function parseDueDateFromFactor(factor: number) {
   if (!Number.isFinite(factor) || factor <= 0) return undefined
 
@@ -149,12 +248,15 @@ function parsePaymentCode(rawCode: string): { amount?: number; dueDate?: string;
   let dueDate: string | undefined
 
   if (digits.length === 44) {
+    if (!validateBoleto44(digits)) return {}
     barcode = digits
   } else if (digits.length === 47) {
-    barcode = `${digits.slice(0, 4)}${digits.slice(32, 33)}${digits.slice(33, 47)}${digits.slice(4, 8)}${digits.slice(10, 20)}${digits.slice(21, 31)}`
+    if (!validateLinhaDigitavel47(digits)) return {}
+    barcode = convertLinhaDigitavel47ToBarcode(digits)
   } else if (digits.length === 48 && digits.startsWith('8')) {
     // Convenio/arrecadacao line digitavel: remove DV at the end of each 12-digit block.
-    barcode = `${digits.slice(0, 11)}${digits.slice(12, 23)}${digits.slice(24, 35)}${digits.slice(36, 47)}`
+    if (!validateLinhaDigitavel48(digits)) return {}
+    barcode = convertLinhaDigitavel48ToBarcode(digits)
   } else {
     return { normalizedCode: digits }
   }
@@ -262,6 +364,7 @@ export default function TransactionsPage() {
   const streamRef = useRef<MediaStream | null>(null)
   const scanTimerRef = useRef<number | null>(null)
   const scannerControlsRef = useRef<{ stop: () => void } | null>(null)
+  const pendingScanRef = useRef<{ key: string; mode: 'qr' | 'barcode'; at: number } | null>(null)
 
   useEffect(() => {
     if (!isBusinessPlan) return
@@ -410,10 +513,19 @@ export default function TransactionsPage() {
             if (result) {
               const rawValue = String(result.getText()).trim()
               if (rawValue) {
-                applyScannedCode(rawValue, scannerMode)
-                setScannerOpen(false)
-                stopScanner()
-                return
+                const scanKey = rawValue.replace(/\s+/g, '')
+                const now = Date.now()
+                const pending = pendingScanRef.current
+
+                if (pending && pending.key === scanKey && pending.mode === scannerMode && (now - pending.at) < 1800) {
+                  applyScannedCode(rawValue, scannerMode)
+                  setScannerOpen(false)
+                  stopScanner()
+                  return
+                }
+
+                pendingScanRef.current = { key: scanKey, mode: scannerMode, at: now }
+                setScannerMessage('Leitura detectada. Mantenha o codigo parado por 1 segundo para confirmar.')
               }
             }
 
@@ -460,6 +572,7 @@ export default function TransactionsPage() {
     if (videoRef.current) {
       videoRef.current.srcObject = null
     }
+    pendingScanRef.current = null
   }
 
   function isLikelyPixPayload(value: string) {
@@ -484,6 +597,10 @@ export default function TransactionsPage() {
 
     if (isBarcode) {
       const parsed = parsePaymentCode(digits)
+      if (!parsed.normalizedCode) {
+        addToast('Codigo de barras invalido. Tente enquadrar novamente.', 'warning')
+        return
+      }
       setForm((prev) => ({
         ...prev,
         businessDocCode: parsed.normalizedCode || digits,
