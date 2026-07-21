@@ -60,8 +60,7 @@ const PAYMENT_METHOD_META: Record<string, { label: string; icon: any; className:
 
 const getPaymentMethodMeta = (method?: string) => PAYMENT_METHOD_META[method || 'CASH'] || PAYMENT_METHOD_META.CASH
 
-const SCAN_FORMATS = [
-  BarcodeFormat.QR_CODE,
+const BARCODE_SCAN_FORMATS = [
   BarcodeFormat.ITF,
   BarcodeFormat.CODE_128,
   BarcodeFormat.CODE_39,
@@ -69,6 +68,10 @@ const SCAN_FORMATS = [
   BarcodeFormat.EAN_8,
   BarcodeFormat.UPC_A,
   BarcodeFormat.UPC_E,
+]
+
+const QR_SCAN_FORMATS = [
+  BarcodeFormat.QR_CODE,
   BarcodeFormat.PDF_417,
   BarcodeFormat.AZTEC,
   BarcodeFormat.DATA_MATRIX,
@@ -221,6 +224,7 @@ export default function TransactionsPage() {
   const allVisibleSelected = transactions.length > 0 && transactions.every((tx) => selectedTransactionIds.includes(tx.id))
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
   const [scannerOpen, setScannerOpen] = useState(false)
+  const [scannerMode, setScannerMode] = useState<'qr' | 'barcode'>('barcode')
   const [scannerLoading, setScannerLoading] = useState(false)
   const [scannerMessage, setScannerMessage] = useState('Posicione o QR Code ou codigo de barras dentro da camera.')
   const [scannerError, setScannerError] = useState('')
@@ -336,7 +340,9 @@ export default function TransactionsPage() {
     async function startScannerAfterMount() {
       setScannerLoading(true)
       setScannerError('')
-      setScannerMessage('Posicione o QR Code ou codigo de barras dentro da camera.')
+      setScannerMessage(scannerMode === 'qr'
+        ? 'Posicione o QR Code do Pix dentro da camera.'
+        : 'Posicione o codigo de barras do boleto dentro da camera.')
 
       try {
         if (!navigator?.mediaDevices?.getUserMedia) {
@@ -372,7 +378,7 @@ export default function TransactionsPage() {
         }
 
         const hints = new Map()
-        hints.set(DecodeHintType.POSSIBLE_FORMATS, SCAN_FORMATS)
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, scannerMode === 'qr' ? QR_SCAN_FORMATS : BARCODE_SCAN_FORMATS)
         hints.set(DecodeHintType.TRY_HARDER, true)
 
         const reader = new BrowserMultiFormatReader(hints)
@@ -383,7 +389,7 @@ export default function TransactionsPage() {
             if (result) {
               const rawValue = String(result.getText()).trim()
               if (rawValue) {
-                applyScannedCode(rawValue)
+                applyScannedCode(rawValue, scannerMode)
                 setScannerOpen(false)
                 stopScanner()
                 return
@@ -411,7 +417,7 @@ export default function TransactionsPage() {
     return () => {
       cancelled = true
     }
-  }, [scannerOpen])
+  }, [scannerOpen, scannerMode])
 
   function stopScanner() {
     if (scanTimerRef.current !== null) {
@@ -440,10 +446,20 @@ export default function TransactionsPage() {
     return normalized.startsWith('000201') || normalized.includes('BR.GOV.BCB.PIX')
   }
 
-  function applyScannedCode(rawValue: string) {
+  function applyScannedCode(rawValue: string, mode: 'qr' | 'barcode' = 'barcode') {
     const scanned = String(rawValue || '').trim()
     const digits = scanned.replace(/\D/g, '')
     const isBarcode = digits.length === 44 || digits.length === 47
+
+    if (mode === 'qr' && !isLikelyPixPayload(scanned)) {
+      addToast('Esse conteudo nao parece um QR Pix. Tente o modo Código de Barras.', 'warning')
+      return
+    }
+
+    if (mode === 'barcode' && isLikelyPixPayload(scanned)) {
+      addToast('Esse conteudo parece QR Pix. Use o botão Ler QR Code.', 'warning')
+      return
+    }
 
     if (isBarcode) {
       const parsed = parsePaymentCode(digits)
@@ -483,7 +499,8 @@ export default function TransactionsPage() {
     addToast('Leitura realizada. Conteudo aplicado no campo Pix.', 'success')
   }
 
-  async function openCameraScanner() {
+  async function openCameraScanner(mode: 'qr' | 'barcode') {
+    setScannerMode(mode)
     setScannerOpen(true)
   }
 
@@ -986,10 +1003,19 @@ export default function TransactionsPage() {
               <div className="flex items-end">
                 <button
                   type="button"
-                  onClick={openCameraScanner}
+                  onClick={() => openCameraScanner('qr')}
                   className="w-full rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-3 py-2 text-sm font-semibold text-cyan-200 hover:bg-cyan-500/20"
                 >
-                  Ler com camera
+                  Ler QR Code
+                </button>
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={() => openCameraScanner('barcode')}
+                  className="w-full rounded-lg border border-indigo-500/35 bg-indigo-500/10 px-3 py-2 text-sm font-semibold text-indigo-200 hover:bg-indigo-500/20"
+                >
+                  Ler Codigo de Barras
                 </button>
               </div>
             </>
@@ -1068,7 +1094,9 @@ export default function TransactionsPage() {
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs uppercase tracking-[0.18em] text-cyan-300/80">Leitura por camera</p>
-                <h3 className="text-lg font-bold text-white">Escanear QR Code ou codigo de barras</h3>
+                <h3 className="text-lg font-bold text-white">
+                  {scannerMode === 'qr' ? 'Escanear QR Code Pix' : 'Escanear codigo de barras do boleto'}
+                </h3>
               </div>
               <button
                 type="button"
