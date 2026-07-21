@@ -311,6 +311,7 @@ function formatInvoiceMonth(monthKey: string) {
 export default function TransactionsPage() {
   const { tenant } = useAuth()
   const { addToast } = useToast()
+  const boletoPhotoInputRef = useRef<HTMLInputElement | null>(null)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -341,6 +342,7 @@ export default function TransactionsPage() {
   const [deleting, setDeleting] = useState(false)
   const [paymentConfirm, setPaymentConfirm] = useState<{ open: boolean; tx: Transaction | null; nextPaid: boolean }>({ open: false, tx: null, nextPaid: false })
   const [updatingPayment, setUpdatingPayment] = useState(false)
+  const [photoScanning, setPhotoScanning] = useState(false)
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([])
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [editForm, setEditForm] = useState<{ amount: string; cardBrand: string; customCardBrand: string; dueMonth: string }>({
@@ -720,6 +722,72 @@ export default function TransactionsPage() {
       addToast('Dados identificados e preenchidos automaticamente quando disponiveis.', 'success')
     } else {
       addToast('Nao foi possivel identificar valor/vencimento automaticamente. Complete manualmente.', 'warning')
+    }
+  }
+
+  function openBoletoPhotoPicker() {
+    boletoPhotoInputRef.current?.click()
+  }
+
+  async function handleBoletoPhotoSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+
+    setPhotoScanning(true)
+    try {
+      const objectUrl = URL.createObjectURL(file)
+      const reader = new BrowserMultiFormatReader(new Map([[DecodeHintType.POSSIBLE_FORMATS, BARCODE_SCAN_FORMATS]]))
+      const result = await reader.decodeFromImageUrl(objectUrl)
+      URL.revokeObjectURL(objectUrl)
+      applyBusinessCode(result.getText(), 'Foto do boleto lida com sucesso.')
+    } catch {
+      addToast('Nao consegui ler a foto. Tente aproximar, focar nas barras e tirar outra foto.', 'warning')
+    } finally {
+      setPhotoScanning(false)
+    }
+  }
+
+  function applyBusinessCode(rawCode: string, successMessage = 'Codigo aplicado com sucesso.') {
+    const cleaned = String(rawCode || '').trim().replace(/\s+/g, '')
+    const digits = cleaned.replace(/\D/g, '')
+    const parsed = parsePaymentCode(cleaned)
+
+    if (!parsed.normalizedCode) {
+      setForm((prev) => ({
+        ...prev,
+        businessDocCode: digits || cleaned,
+      }))
+      addToast('Nao consegui validar o codigo. Confirme se ele esta completo.', 'warning')
+      return
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      businessDocCode: parsed.lineCode || parsed.normalizedCode || digits || cleaned,
+      amount: parsed.amount ? String(parsed.amount.toFixed(2)) : prev.amount,
+      businessDueDate: parsed.dueDate || prev.businessDueDate,
+    }))
+
+    addToast(successMessage, 'success')
+  }
+
+  async function pasteBusinessDocCode() {
+    try {
+      if (!navigator?.clipboard?.readText) {
+        addToast('Este navegador nao permite colar automaticamente. Cole manualmente no campo.', 'warning')
+        return
+      }
+
+      const pasted = await navigator.clipboard.readText()
+      if (!pasted) {
+        addToast('Nada foi encontrado na area de transferencia.', 'warning')
+        return
+      }
+
+      applyBusinessCode(pasted, 'Codigo colado e aplicado com sucesso.')
+    } catch {
+      addToast('Nao foi possivel ler a area de transferencia. Cole manualmente no campo.', 'warning')
     }
   }
 
@@ -1135,8 +1203,12 @@ export default function TransactionsPage() {
                   value={form.businessDocCode}
                   onChange={e => setForm(p => ({ ...p, businessDocCode: e.target.value }))}
                   className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2"
-                  placeholder="Cole o codigo do boleto"
+                  placeholder="Cole o codigo completo do boleto"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  spellCheck={false}
                 />
+                <p className="mt-1 text-[11px] text-slate-500">Use o número completo do boleto, com 44 ou 47 dígitos. Se preferir, clique em colar.</p>
               </div>
               <div className="col-span-2 md:col-span-3">
                 <label className="text-slate-400 text-xs uppercase tracking-[0.16em] block mb-1">Pix copia e cola / payload QR</label>
@@ -1160,11 +1232,37 @@ export default function TransactionsPage() {
               <div className="flex items-end">
                 <button
                   type="button"
-                  onClick={handleParseBusinessCode}
+                  onClick={pasteBusinessDocCode}
                   className="w-full rounded-lg border border-emerald-500/35 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-200 hover:bg-emerald-500/20"
                 >
-                  Ler codigo/QR e preencher
+                  Colar codigo completo
                 </button>
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={handleParseBusinessCode}
+                  className="w-full rounded-lg border border-slate-500/35 bg-slate-500/10 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-500/20"
+                >
+                  Validar codigo colado
+                </button>
+              </div>
+              <div className="flex items-end">
+                <button
+                  type="button"
+                  onClick={openBoletoPhotoPicker}
+                  className="w-full rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-200 hover:bg-amber-500/20"
+                >
+                  {photoScanning ? 'Lendo foto...' : 'Tirar foto do boleto'}
+                </button>
+                <input
+                  ref={boletoPhotoInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={handleBoletoPhotoSelected}
+                  className="hidden"
+                />
               </div>
               <div className="flex items-end">
                 <button
