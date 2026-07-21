@@ -203,6 +203,22 @@ function convertLinhaDigitavel48ToBarcode(line: string) {
   return `${line.slice(0, 11)}${line.slice(12, 23)}${line.slice(24, 35)}${line.slice(36, 47)}`
 }
 
+function convertBarcode44ToLinhaDigitavel47(barcode: string) {
+  if (!/^\d{44}$/.test(barcode) || barcode.startsWith('8')) return undefined
+
+  const field1Data = `${barcode.slice(0, 4)}${barcode.slice(19, 24)}`
+  const field2Data = barcode.slice(24, 34)
+  const field3Data = barcode.slice(34, 44)
+  const field4 = barcode.slice(4, 5)
+  const field5 = barcode.slice(5, 19)
+
+  const dv1 = String(modulo10(field1Data))
+  const dv2 = String(modulo10(field2Data))
+  const dv3 = String(modulo10(field3Data))
+
+  return `${field1Data}${dv1}${field2Data}${dv2}${field3Data}${dv3}${field4}${field5}`
+}
+
 function validateLinhaDigitavel48(line: string) {
   if (!/^\d{48}$/.test(line) || !line.startsWith('8')) return false
   const ref = line[2]
@@ -239,24 +255,28 @@ function parseDueDateFromFactor(factor: number) {
   return formatIsoDate(legacyDue)
 }
 
-function parsePaymentCode(rawCode: string): { amount?: number; dueDate?: string; normalizedCode?: string } {
+function parsePaymentCode(rawCode: string): { amount?: number; dueDate?: string; normalizedCode?: string; lineCode?: string } {
   const digits = String(rawCode || '').replace(/\D/g, '')
   if (!digits) return {}
 
   let barcode = ''
   let amount: number | undefined
   let dueDate: string | undefined
+  let lineCode: string | undefined
 
   if (digits.length === 44) {
     if (!validateBoleto44(digits)) return {}
     barcode = digits
+    lineCode = convertBarcode44ToLinhaDigitavel47(digits)
   } else if (digits.length === 47) {
     if (!validateLinhaDigitavel47(digits)) return {}
     barcode = convertLinhaDigitavel47ToBarcode(digits)
+    lineCode = digits
   } else if (digits.length === 48 && digits.startsWith('8')) {
     // Convenio/arrecadacao line digitavel: remove DV at the end of each 12-digit block.
     if (!validateLinhaDigitavel48(digits)) return {}
     barcode = convertLinhaDigitavel48ToBarcode(digits)
+    lineCode = digits
   } else {
     return { normalizedCode: digits }
   }
@@ -274,7 +294,7 @@ function parsePaymentCode(rawCode: string): { amount?: number; dueDate?: string;
     amount = Number.isFinite(amountCents) && amountCents > 0 ? amountCents / 100 : undefined
   }
 
-  return { amount, dueDate, normalizedCode: barcode }
+  return { amount, dueDate, normalizedCode: barcode, lineCode }
 }
 
 function getInvoiceMonthKey(tx: Transaction) {
@@ -603,7 +623,7 @@ export default function TransactionsPage() {
       }
       setForm((prev) => ({
         ...prev,
-        businessDocCode: parsed.normalizedCode || digits,
+        businessDocCode: parsed.lineCode || parsed.normalizedCode || digits,
         amount: parsed.amount ? String(parsed.amount.toFixed(2)) : prev.amount,
         businessDueDate: parsed.dueDate || prev.businessDueDate,
       }))
@@ -689,7 +709,7 @@ export default function TransactionsPage() {
       ...prev,
       amount: parsed.amount ? String(parsed.amount.toFixed(2)) : prev.amount,
       businessDueDate: parsed.dueDate || prev.businessDueDate,
-      businessDocCode: parsed.normalizedCode || prev.businessDocCode,
+      businessDocCode: parsed.lineCode || parsed.normalizedCode || prev.businessDocCode,
       paymentMethod: prev.paymentMethod || 'PIX',
     }))
 
