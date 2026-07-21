@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import api from '@/lib/api'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatDate } from '@/lib/utils'
 import { useAnimatedNumber } from '@/lib/useAnimatedNumber'
 import AnimatedCurrency from '@/components/AnimatedCurrency'
 import OnboardingGuide from '@/components/OnboardingGuide'
@@ -16,7 +16,7 @@ import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
-import { TrendingUp, TrendingDown, DollarSign, Target, CalendarClock, HeartPulse, PiggyBank, Smile, Meh, Frown, Plus, Trash2, CreditCard, Wallet, QrCode, FileText, Rocket } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, Target, CalendarClock, HeartPulse, PiggyBank, Smile, Meh, Frown, Plus, Trash2, CreditCard, Wallet, QrCode, FileText, Rocket, CheckCircle, ShieldAlert } from 'lucide-react'
 
 interface Goal {
   id: string
@@ -203,6 +203,7 @@ function getMoodLabel(mood: DisplayMood) {
 
 export default function DashboardPage() {
   const { tenant, logout } = useAuth()
+  const isBusinessPlan = String(tenant?.plan || '').toUpperCase() === 'EMPRESA'
   const [summary, setSummary] = useState<Summary | null>(null)
   const [evolution, setEvolution] = useState<any[]>([])
   const [categories, setCategories] = useState<any[]>([])
@@ -234,6 +235,23 @@ export default function DashboardPage() {
   const [reportPeriod, setReportPeriod] = useState<ReportPeriod>('CURRENT_MONTH')
   const [recentEntries, setRecentEntries] = useState<Array<{ id: string; description: string; amount: number; category: string; paymentMethod?: string }>>([])
   const [recentExpenses, setRecentExpenses] = useState<Array<{ id: string; description: string; amount: number; category: string; paymentMethod?: string }>>([])
+  const [businessBillSummary, setBusinessBillSummary] = useState<{
+    monthKey: string
+    paid: any[]
+    pending: any[]
+    overdue: any[]
+    totalPaid: number
+    totalPending: number
+    totalOverdue: number
+  }>({
+    monthKey: '',
+    paid: [],
+    pending: [],
+    overdue: [],
+    totalPaid: 0,
+    totalPending: 0,
+    totalOverdue: 0
+  })
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -332,6 +350,29 @@ export default function DashboardPage() {
             category: tx.category?.name || tx.category || 'Outros',
             paymentMethod: tx.paymentMethod || 'CASH',
           })))
+
+          if (isBusinessPlan) {
+            const currentMonthKey = new Date().toISOString().slice(0, 7)
+            const [paidRes, pendingRes, overdueRes] = await Promise.allSettled([
+              api.get(`/dashboard/transactions?month=${currentMonthKey}&type=EXPENSE&status=PAID&limit=300&page=1`),
+              api.get(`/dashboard/transactions?month=${currentMonthKey}&type=EXPENSE&status=PENDING&limit=300&page=1`),
+              api.get(`/dashboard/transactions?month=${currentMonthKey}&type=EXPENSE&status=OVERDUE&limit=300&page=1`),
+            ])
+
+            const paid = paidRes.status === 'fulfilled' ? (paidRes.value.data?.transactions || []) : []
+            const pending = pendingRes.status === 'fulfilled' ? (pendingRes.value.data?.transactions || []) : []
+            const overdue = overdueRes.status === 'fulfilled' ? (overdueRes.value.data?.transactions || []) : []
+
+            setBusinessBillSummary({
+              monthKey: currentMonthKey,
+              paid,
+              pending,
+              overdue,
+              totalPaid: paid.reduce((sum: number, tx: any) => sum + Number(tx?.amount || 0), 0),
+              totalPending: pending.reduce((sum: number, tx: any) => sum + Number(tx?.amount || 0), 0),
+              totalOverdue: overdue.reduce((sum: number, tx: any) => sum + Number(tx?.amount || 0), 0),
+            })
+          }
 
           if (force || Date.now() - diagnosticsLastLoadAtRef.current > 60000) {
             await loadDiagnostics()
@@ -442,6 +483,29 @@ export default function DashboardPage() {
         })))
       } else {
         setRecentExpenses([])
+      }
+
+      if (isBusinessPlan) {
+        const currentMonthKey = new Date().toISOString().slice(0, 7)
+        const [paidRes, pendingRes, overdueRes] = await Promise.allSettled([
+          api.get(`/dashboard/transactions?month=${currentMonthKey}&type=EXPENSE&status=PAID&limit=300&page=1`),
+          api.get(`/dashboard/transactions?month=${currentMonthKey}&type=EXPENSE&status=PENDING&limit=300&page=1`),
+          api.get(`/dashboard/transactions?month=${currentMonthKey}&type=EXPENSE&status=OVERDUE&limit=300&page=1`),
+        ])
+
+        const paid = paidRes.status === 'fulfilled' ? (paidRes.value.data?.transactions || []) : []
+        const pending = pendingRes.status === 'fulfilled' ? (pendingRes.value.data?.transactions || []) : []
+        const overdue = overdueRes.status === 'fulfilled' ? (overdueRes.value.data?.transactions || []) : []
+
+        setBusinessBillSummary({
+          monthKey: currentMonthKey,
+          paid,
+          pending,
+          overdue,
+          totalPaid: paid.reduce((sum: number, tx: any) => sum + Number(tx?.amount || 0), 0),
+          totalPending: pending.reduce((sum: number, tx: any) => sum + Number(tx?.amount || 0), 0),
+          totalOverdue: overdue.reduce((sum: number, tx: any) => sum + Number(tx?.amount || 0), 0),
+        })
       }
 
       if (force || Date.now() - diagnosticsLastLoadAtRef.current > 60000) {
@@ -1207,8 +1271,131 @@ export default function DashboardPage() {
     )
   }
 
+  const BusinessMetricCard = ({ label, value, icon: Icon, color, note }: { label: string; value: number; icon: any; color: 'green' | 'blue' | 'red' | 'amber' | 'cyan'; note?: string }) => {
+    const cardStyles = {
+      green: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
+      blue: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200',
+      red: 'border-rose-500/30 bg-rose-500/10 text-rose-200',
+      amber: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
+      cyan: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200'
+    }
+
+    return (
+      <div className={`rounded-2xl border p-4 ${cardStyles[color]}`}>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-xs uppercase tracking-[0.18em] text-white/60">{label}</p>
+            <p className="mt-2 text-3xl font-black text-white">{value}</p>
+            {note && <p className="mt-1 text-xs text-white/60">{note}</p>}
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-2 text-white/80">
+            <Icon size={18} />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (isBusinessPlan) {
+    const paidCount = businessBillSummary.paid.length
+    const pendingCount = businessBillSummary.pending.length
+    const overdueCount = businessBillSummary.overdue.length
+
+    return (
+      <div className="relative min-h-screen bg-[#050816] text-slate-100">
+        <div className="pointer-events-none fixed inset-0 overflow-hidden">
+          <div className="absolute -top-44 left-[-8rem] h-[30rem] w-[30rem] rounded-full bg-cyan-500/12 blur-3xl" />
+          <div className="absolute top-1/3 -right-32 h-[28rem] w-[28rem] rounded-full bg-emerald-500/10 blur-3xl" />
+        </div>
+
+        <div className="relative mx-auto max-w-6xl p-4 md:p-6 lg:p-8">
+          <div className="rounded-3xl border border-cyan-400/20 bg-slate-900/75 p-6 shadow-[0_18px_48px_rgba(2,8,23,0.55)] backdrop-blur-xl">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/80">Modo Empresa</p>
+                <h1 className="mt-2 text-3xl font-black text-white">Boletos e pagamentos</h1>
+                <p className="mt-2 text-sm text-slate-300">Painel enxuto para lançar boletos, copiar código/QR e acompanhar pagamentos do mês.</p>
+              </div>
+              <div className="flex gap-2">
+                <Link href="/dashboard/transactions" className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-300">Lançar boleto</Link>
+                <Link href="/dashboard/bills" className="rounded-xl border border-slate-700 bg-slate-950 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800">Ver faturas</Link>
+              </div>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-4">
+              <BusinessMetricCard label="Pagos no mês" value={paidCount} icon={CheckCircle} color="green" note={formatCurrency(businessBillSummary.totalPaid)} />
+              <BusinessMetricCard label="A pagar" value={pendingCount} icon={FileText} color="amber" note={formatCurrency(businessBillSummary.totalPending)} />
+              <BusinessMetricCard label="Vencidos" value={overdueCount} icon={ShieldAlert} color="red" note={formatCurrency(businessBillSummary.totalOverdue)} />
+              <BusinessMetricCard label="Saldo em caixa" value={Number(summary.balance.total || 0)} icon={DollarSign} color="cyan" note={summary.cashFlow.profit >= 0 ? 'Operacao positiva' : 'Operacao pressionada'} />
+            </div>
+
+            <div className="mt-6 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-2xl border border-slate-700/70 bg-slate-950/60 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-white">Boletos a pagar</p>
+                  <p className="text-xs text-slate-400">{businessBillSummary.monthKey || new Date().toISOString().slice(0, 7)}</p>
+                </div>
+                <div className="space-y-2">
+                  {businessBillSummary.pending.slice(0, 5).map((tx: any) => (
+                    <div key={tx.id} className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-white">{cleanDescription(tx.description)}</span>
+                        <span className="font-semibold text-amber-200">{formatCurrency(Number(tx.amount || 0))}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-400">Vencimento: {tx.dueDate ? formatDate(tx.dueDate) : 'Nao informado'}</p>
+                    </div>
+                  ))}
+                  {businessBillSummary.pending.length === 0 && <p className="text-sm text-slate-500">Nenhum boleto pendente neste mes.</p>}
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-slate-700/70 bg-slate-950/60 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-white">Boletos pagos</p>
+                  <p className="text-xs text-slate-400">{paidCount} pagos</p>
+                </div>
+                <div className="space-y-2">
+                  {businessBillSummary.paid.slice(0, 5).map((tx: any) => (
+                    <div key={tx.id} className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-white">{cleanDescription(tx.description)}</span>
+                        <span className="font-semibold text-emerald-200">{formatCurrency(Number(tx.amount || 0))}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-400">Pago em: {tx.date ? formatDate(tx.date) : 'Nao informado'}</p>
+                    </div>
+                  ))}
+                  {businessBillSummary.paid.length === 0 && <p className="text-sm text-slate-500">Nenhum boleto pago neste mes.</p>}
+                </div>
+              </div>
+            </div>
+
+            {businessBillSummary.overdue.length > 0 && (
+              <div className="mt-4 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4">
+                <p className="mb-2 text-sm font-semibold text-white">Vencidos</p>
+                <div className="space-y-2">
+                  {businessBillSummary.overdue.slice(0, 5).map((tx: any) => (
+                    <div key={tx.id} className="rounded-xl border border-rose-500/20 bg-slate-950/50 p-3 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-white">{cleanDescription(tx.description)}</span>
+                        <span className="font-semibold text-rose-200">{formatCurrency(Number(tx.amount || 0))}</span>
+                      </div>
+                      <p className="mt-1 text-xs text-slate-400">Venceu em: {tx.dueDate ? formatDate(tx.dueDate) : 'Nao informado'}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="mt-4 rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4 text-sm text-cyan-100">
+              Para pagar, copie o código ou Pix no módulo de lançamentos e volte para marcar como pago.
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const now = new Date()
-  const isBusinessPlan = String(tenant?.plan || '').toUpperCase() === 'EMPRESA'
   const currentDateLabel = now.toLocaleDateString('pt-BR', {
     weekday: 'long',
     day: '2-digit',
