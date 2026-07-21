@@ -1,5 +1,19 @@
 import axios from 'axios'
 
+function isTokenExpired(token: string) {
+  try {
+    const [, payload] = String(token || '').split('.')
+    if (!payload) return true
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const decoded = JSON.parse(atob(normalized))
+    const exp = Number(decoded?.exp || 0)
+    if (!exp) return true
+    return exp * 1000 <= Date.now()
+  } catch {
+    return true
+  }
+}
+
 function resolveApiBaseUrl() {
   const explicit = String(process.env.NEXT_PUBLIC_API_URL || '').trim()
   if (explicit) return explicit
@@ -19,7 +33,18 @@ api.interceptors.request.use((config) => {
     } catch {
       token = null
     }
-    if (token) config.headers.Authorization = `Bearer ${token}`
+    if (token) {
+      if (isTokenExpired(token)) {
+        try {
+          localStorage.removeItem('token')
+          localStorage.removeItem('tenant')
+        } catch {
+          // Ignore storage errors on restricted mobile/PWA contexts.
+        }
+      } else {
+        config.headers.Authorization = `Bearer ${token}`
+      }
+    }
   }
   return config
 })
