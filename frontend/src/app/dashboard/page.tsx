@@ -388,9 +388,9 @@ export default function DashboardPage() {
           if (isBusinessPlan) {
             const currentMonthKey = new Date().toISOString().slice(0, 7)
             const [paidRes, pendingRes, overdueRes] = await Promise.allSettled([
-              api.get(`/dashboard/transactions?month=${currentMonthKey}&type=EXPENSE&status=PAID&limit=300&page=1`),
-              api.get(`/dashboard/transactions?month=${currentMonthKey}&type=EXPENSE&status=PENDING&limit=300&page=1`),
-              api.get(`/dashboard/transactions?month=${currentMonthKey}&type=EXPENSE&status=OVERDUE&limit=300&page=1`),
+              api.get(`/dashboard/transactions?month=${currentMonthKey}&monthField=dueDate&type=EXPENSE&status=PAID&limit=300&page=1`),
+              api.get(`/dashboard/transactions?month=${currentMonthKey}&monthField=dueDate&type=EXPENSE&status=PENDING&limit=300&page=1`),
+              api.get(`/dashboard/transactions?month=${currentMonthKey}&monthField=dueDate&type=EXPENSE&status=OVERDUE&limit=300&page=1`),
             ])
 
             const paid = paidRes.status === 'fulfilled' ? (paidRes.value.data?.transactions || []) : []
@@ -523,9 +523,9 @@ export default function DashboardPage() {
       if (isBusinessPlan) {
         const currentMonthKey = new Date().toISOString().slice(0, 7)
         const [paidRes, pendingRes, overdueRes] = await Promise.allSettled([
-          api.get(`/dashboard/transactions?month=${currentMonthKey}&type=EXPENSE&status=PAID&limit=300&page=1`),
-          api.get(`/dashboard/transactions?month=${currentMonthKey}&type=EXPENSE&status=PENDING&limit=300&page=1`),
-          api.get(`/dashboard/transactions?month=${currentMonthKey}&type=EXPENSE&status=OVERDUE&limit=300&page=1`),
+          api.get(`/dashboard/transactions?month=${currentMonthKey}&monthField=dueDate&type=EXPENSE&status=PAID&limit=300&page=1`),
+          api.get(`/dashboard/transactions?month=${currentMonthKey}&monthField=dueDate&type=EXPENSE&status=PENDING&limit=300&page=1`),
+          api.get(`/dashboard/transactions?month=${currentMonthKey}&monthField=dueDate&type=EXPENSE&status=OVERDUE&limit=300&page=1`),
         ])
 
         const paid = paidRes.status === 'fulfilled' ? (paidRes.value.data?.transactions || []) : []
