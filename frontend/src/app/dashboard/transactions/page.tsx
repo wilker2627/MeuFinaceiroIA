@@ -6,6 +6,7 @@ import { formatCurrency, formatDate } from '@/lib/utils'
 import { useToast } from '@/contexts/ToastContext'
 import { useAuth } from '@/contexts/AuthContext'
 import { BrowserMultiFormatReader } from '@zxing/browser'
+import { BarcodeFormat, DecodeHintType } from '@zxing/library'
 import { Plus, Trash2, Search, CreditCard, Wallet, QrCode, Loader, ChevronDown, ChevronRight, PencilLine } from 'lucide-react'
 import ConfirmModal from '@/components/ConfirmModal'
 import EmptyState, { LoadingSkeleton } from '@/components/EmptyState'
@@ -58,6 +59,20 @@ const PAYMENT_METHOD_META: Record<string, { label: string; icon: any; className:
 }
 
 const getPaymentMethodMeta = (method?: string) => PAYMENT_METHOD_META[method || 'CASH'] || PAYMENT_METHOD_META.CASH
+
+const SCAN_FORMATS = [
+  BarcodeFormat.QR_CODE,
+  BarcodeFormat.ITF,
+  BarcodeFormat.CODE_128,
+  BarcodeFormat.CODE_39,
+  BarcodeFormat.EAN_13,
+  BarcodeFormat.EAN_8,
+  BarcodeFormat.UPC_A,
+  BarcodeFormat.UPC_E,
+  BarcodeFormat.PDF_417,
+  BarcodeFormat.AZTEC,
+  BarcodeFormat.DATA_MATRIX,
+]
 
 const CARD_TAG_REGEX = /\|\s*Cartao:\s*([^|]+)/i
 const PERSON_TAG_REGEX = /\|\s*Pessoa:\s*(.+)$/i
@@ -339,9 +354,30 @@ export default function TransactionsPage() {
           throw new Error('Nao foi possivel inicializar a camera.')
         }
 
-        const reader = new BrowserMultiFormatReader()
+        let preferredDeviceId: string | undefined
+        try {
+          // Prime labels and prefer rear camera on mobile devices.
+          const permissionStream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: 'environment' } },
+            audio: false,
+          })
+          permissionStream.getTracks().forEach((track) => track.stop())
+
+          const devices = await navigator.mediaDevices.enumerateDevices()
+          const videoDevices = devices.filter((device) => device.kind === 'videoinput')
+          const rearDevice = videoDevices.find((device) => /back|rear|traseira|environment|externa/i.test(device.label || ''))
+          preferredDeviceId = rearDevice?.deviceId || videoDevices[videoDevices.length - 1]?.deviceId
+        } catch {
+          preferredDeviceId = undefined
+        }
+
+        const hints = new Map()
+        hints.set(DecodeHintType.POSSIBLE_FORMATS, SCAN_FORMATS)
+        hints.set(DecodeHintType.TRY_HARDER, true)
+
+        const reader = new BrowserMultiFormatReader(hints)
         scannerControlsRef.current = await reader.decodeFromVideoDevice(
-          undefined,
+          preferredDeviceId,
           videoElement,
           (result, error) => {
             if (result) {
