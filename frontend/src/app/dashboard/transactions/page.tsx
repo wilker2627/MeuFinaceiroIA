@@ -123,7 +123,7 @@ function parsePaymentCode(rawCode: string): { amount?: number; dueDate?: string;
   if (digits.length === 44) {
     barcode = digits
   } else if (digits.length === 47) {
-    barcode = `${digits.slice(0, 4)}${digits.slice(32, 33)}${digits.slice(33, 47)}${digits.slice(4, 9)}${digits.slice(10, 20)}${digits.slice(21, 31)}`
+    barcode = `${digits.slice(0, 4)}${digits.slice(32, 33)}${digits.slice(33, 47)}${digits.slice(4, 8)}${digits.slice(10, 20)}${digits.slice(21, 31)}`
   } else {
     return { normalizedCode: digits }
   }
