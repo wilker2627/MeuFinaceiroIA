@@ -327,6 +327,18 @@ function formatInvoiceMonth(monthKey: string) {
   return new Date(year, month - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
 }
 
+function monthKeyFromDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+}
+
+function getBusinessDueMonthKey(tx: Transaction) {
+  const reference = tx.dueDate || tx.date
+  if (!reference) return null
+  const parsed = new Date(reference)
+  if (Number.isNaN(parsed.getTime())) return null
+  return monthKeyFromDate(parsed)
+}
+
 function parseDateFromText(text: string) {
   const normalized = String(text || '')
     .replace(/\s+/g, ' ')
@@ -357,6 +369,8 @@ export default function TransactionsPage() {
   const [typeFilter, setTypeFilter] = useState('')
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('')
   const [businessStatusFilter, setBusinessStatusFilter] = useState('')
+  const [businessMonthFilter, setBusinessMonthFilter] = useState('')
+  const [businessTotalCount, setBusinessTotalCount] = useState(0)
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState<{ type: string; amount: string; description: string; categoryId: string; paymentMethod: string; personName: string; installments: string; creditBillingOption: string; cardBrand: string; customCardBrand: string; businessDueDate: string; businessDocCode: string; businessPixCopy: string }>({
     type: 'EXPENSE',
@@ -402,6 +416,18 @@ export default function TransactionsPage() {
     ? editForm.customCardBrand.trim().toUpperCase()
     : editForm.cardBrand
   const isEditingCreditExpense = editingTransaction?.type === 'EXPENSE' && editingTransaction?.paymentMethod === 'CREDIT_CARD'
+  const businessMonthOptions = useMemo(() => {
+    const now = new Date()
+    return Array.from({ length: 18 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - 3 + index, 1)
+      const monthKey = monthKeyFromDate(date)
+      return {
+        key: monthKey,
+        label: formatInvoiceMonth(monthKey)
+      }
+    })
+  }, [])
+
   const editPreviewDescription = useMemo(() => {
     if (!editingTransaction) return ''
     const currentPerson = extractPersonFromDescription(editingTransaction.description)
@@ -445,7 +471,10 @@ export default function TransactionsPage() {
     }))
     setTypeFilter('')
     setPaymentMethodFilter('')
-  }, [isBusinessPlan])
+    if (!businessMonthFilter) {
+      setBusinessMonthFilter(monthKeyFromDate(new Date()))
+    }
+  }, [isBusinessPlan, businessMonthFilter])
 
   const getResponsibleName = (tx: Transaction) => tx.user?.name || tx.from?.name || tx.to?.name || extractPersonFromDescription(tx.description) || 'Sem responsavel'
 
@@ -517,6 +546,39 @@ export default function TransactionsPage() {
       regularItems,
     }
   }, [transactions])
+
+  const businessTransactionsByMonth = useMemo(() => {
+    if (!isBusinessPlan) return [] as Array<{ monthKey: string; label: string; items: Transaction[]; total: number }>
+
+    const map = new Map<string, { monthKey: string; label: string; items: Transaction[]; total: number }>()
+    const items = transactions
+      .filter((tx) => tx.type === 'EXPENSE')
+      .sort((a, b) => {
+        const aTime = new Date(a.dueDate || a.date || 0).getTime()
+        const bTime = new Date(b.dueDate || b.date || 0).getTime()
+        return aTime - bTime
+      })
+
+    items.forEach((tx) => {
+      const monthKey = getBusinessDueMonthKey(tx) || 'sem-data'
+      const label = monthKey === 'sem-data' ? 'Sem vencimento' : formatInvoiceMonth(monthKey)
+      const existing = map.get(monthKey)
+      if (existing) {
+        existing.items.push(tx)
+        existing.total += Number(tx.amount || 0)
+        return
+      }
+
+      map.set(monthKey, {
+        monthKey,
+        label,
+        items: [tx],
+        total: Number(tx.amount || 0),
+      })
+    })
+
+    return Array.from(map.values()).sort((a, b) => a.monthKey.localeCompare(b.monthKey))
+  }, [transactions, isBusinessPlan])
 
   useEffect(() => {
     setOpenGroups((prev) => {
@@ -714,8 +776,14 @@ export default function TransactionsPage() {
     setLoading(true)
     const params = new URLSearchParams()
     if (debouncedSearch) params.set('search', debouncedSearch)
+    params.set('page', '1')
+    params.set('limit', isBusinessPlan ? '500' : '100')
     if (isBusinessPlan) {
       params.set('type', 'EXPENSE')
+      if (businessMonthFilter) {
+        params.set('month', businessMonthFilter)
+        params.set('monthField', 'dueDate')
+      }
     } else {
       if (typeFilter) params.set('type', typeFilter)
       if (paymentMethodFilter) params.set('paymentMethod', paymentMethodFilter)
@@ -724,6 +792,7 @@ export default function TransactionsPage() {
     const t = await api.get(`/dashboard/transactions?${params}`)
     const nextTransactions = t.data.transactions
     setTransactions(nextTransactions)
+    setBusinessTotalCount(Number(t.data?.total || nextTransactions.length || 0))
     setSelectedTransactionIds((prev) => prev.filter((id) => nextTransactions.some((tx: Transaction) => tx.id === id)))
     setLoading(false)
   }
@@ -737,7 +806,7 @@ export default function TransactionsPage() {
     setAccounts(a.data)
   }
 
-  useEffect(() => { load() }, [debouncedSearch, typeFilter, paymentMethodFilter, businessStatusFilter, isBusinessPlan])
+  useEffect(() => { load() }, [debouncedSearch, typeFilter, paymentMethodFilter, businessStatusFilter, businessMonthFilter, isBusinessPlan])
   useEffect(() => { loadMetadata() }, [])
 
   const businessExpenseSummary = useMemo(() => {
@@ -1126,7 +1195,7 @@ export default function TransactionsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-white">{isBusinessPlan ? 'Contas a Pagar' : 'Lançamentos'}</h1>
-          <p className="text-slate-400 text-sm mt-1">{transactions.length} {isBusinessPlan ? 'conta(s) encontrada(s)' : 'transações encontradas'}</p>
+          <p className="text-slate-400 text-sm mt-1">{isBusinessPlan ? businessTotalCount : transactions.length} {isBusinessPlan ? 'boleto(s) encontrado(s)' : 'transações encontradas'}</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {transactions.length > 0 && (
@@ -1401,7 +1470,12 @@ export default function TransactionsPage() {
       )}
 
       {isBusinessPlan && (
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-4">
+          <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/10 p-4">
+            <p className="text-xs uppercase tracking-[0.18em] text-cyan-200/80">Total de boletos</p>
+            <p className="mt-1 text-xl font-black text-cyan-100">{businessTotalCount}</p>
+            <p className="text-xs text-cyan-200/80">{formatCurrency(transactions.reduce((sum, tx) => sum + Number(tx.amount || 0), 0))}</p>
+          </div>
           <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-4">
             <p className="text-xs uppercase tracking-[0.18em] text-amber-200/80">A pagar</p>
             <p className="mt-1 text-xl font-black text-amber-100">{businessExpenseSummary.pendingCount}</p>
@@ -1430,6 +1504,16 @@ export default function TransactionsPage() {
         </div>
         {isBusinessPlan ? (
           <div className="flex flex-wrap gap-2">
+            <select
+              value={businessMonthFilter}
+              onChange={(e) => setBusinessMonthFilter(e.target.value)}
+              className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-200"
+            >
+              <option value="">Todos os meses</option>
+              {businessMonthOptions.map((option) => (
+                <option key={option.key} value={option.key}>{option.label}</option>
+              ))}
+            </select>
             <button
               type="button"
               onClick={() => setBusinessStatusFilter('')}
@@ -1565,7 +1649,20 @@ export default function TransactionsPage() {
 
             {isBusinessPlan ? (
               <div className="space-y-3">
-                {transactions.map(renderTransactionItem)}
+                {businessTransactionsByMonth.map((group) => (
+                  <div key={group.monthKey} className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 overflow-hidden">
+                    <div className="flex items-center justify-between gap-4 px-4 py-3">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{group.label}</p>
+                        <p className="text-xs text-cyan-100/75">{group.items.length} boleto(s)</p>
+                      </div>
+                      <p className="text-sm font-semibold text-cyan-100">{formatCurrency(group.total)}</p>
+                    </div>
+                    <div className="space-y-3 border-t border-cyan-500/15 bg-slate-950/35 p-4">
+                      {group.items.map(renderTransactionItem)}
+                    </div>
+                  </div>
+                ))}
               </div>
             ) : groupedTransactions.regularItems.length > 0 && (
               <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 overflow-hidden">
