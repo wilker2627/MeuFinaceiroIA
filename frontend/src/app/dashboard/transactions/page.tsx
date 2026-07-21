@@ -214,6 +214,17 @@ export default function TransactionsPage() {
   const scanTimerRef = useRef<number | null>(null)
   const scannerControlsRef = useRef<{ stop: () => void } | null>(null)
 
+  useEffect(() => {
+    if (!isBusinessPlan) return
+    setForm((prev) => ({
+      ...prev,
+      type: 'EXPENSE',
+      paymentMethod: 'PIX',
+    }))
+    setTypeFilter('')
+    setPaymentMethodFilter('')
+  }, [isBusinessPlan])
+
   const getResponsibleName = (tx: Transaction) => tx.user?.name || tx.from?.name || tx.to?.name || extractPersonFromDescription(tx.description) || 'Sem responsavel'
 
   const getEffectiveDate = (tx: Transaction) => tx.type === 'EXPENSE' && tx.isPaid === false && tx.dueDate ? tx.dueDate : tx.date
@@ -441,8 +452,12 @@ export default function TransactionsPage() {
     setLoading(true)
     const params = new URLSearchParams()
     if (search) params.set('search', search)
-    if (typeFilter) params.set('type', typeFilter)
-    if (paymentMethodFilter) params.set('paymentMethod', paymentMethodFilter)
+    if (isBusinessPlan) {
+      params.set('type', 'EXPENSE')
+    } else {
+      if (typeFilter) params.set('type', typeFilter)
+      if (paymentMethodFilter) params.set('paymentMethod', paymentMethodFilter)
+    }
     if (isBusinessPlan && businessStatusFilter) params.set('status', businessStatusFilter)
     const [t, c, a] = await Promise.all([
       api.get(`/dashboard/transactions?${params}`),
@@ -789,7 +804,7 @@ export default function TransactionsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl md:text-3xl font-black text-white">Lançamentos</h1>
-          <p className="text-slate-400 text-sm mt-1">{transactions.length} transações encontradas</p>
+          <p className="text-slate-400 text-sm mt-1">{transactions.length} {isBusinessPlan ? 'conta(s) encontrada(s)' : 'transações encontradas'}</p>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
           {transactions.length > 0 && (
@@ -815,7 +830,7 @@ export default function TransactionsPage() {
             onClick={() => setShowForm(!showForm)}
             className="flex items-center gap-2 bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-semibold px-4 py-2 rounded-lg transition-colors"
           >
-            <Plus size={18} /> Novo Lançamento
+            <Plus size={18} /> {isBusinessPlan ? 'Adicionar boleto' : 'Novo Lançamento'}
           </button>
         </div>
       </div>
@@ -866,7 +881,7 @@ export default function TransactionsPage() {
                 }
               }
             }}
-              className={`w-full bg-slate-950 border ${formErrors.description ? 'border-rose-500' : 'border-cyan-500/20'} text-white rounded-lg px-3 py-2`} placeholder="Ex: Gasolina" />
+              className={`w-full bg-slate-950 border ${formErrors.description ? 'border-rose-500' : 'border-cyan-500/20'} text-white rounded-lg px-3 py-2`} placeholder={isBusinessPlan ? 'Ex: Fornecedor A' : 'Ex: Gasolina'} />
             {formErrors.description && <p className="text-rose-400 text-xs mt-1">{formErrors.description}</p>}
           </div>
           <div>
@@ -1059,29 +1074,55 @@ export default function TransactionsPage() {
             className="w-full bg-slate-950 border border-cyan-500/20 text-white rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:border-cyan-400"
             placeholder="Buscar lançamento..." />
         </div>
-        <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
-          className="bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2 text-sm">
-          <option value="">Todos</option>
-          <option value="INCOME">Entradas</option>
-          <option value="EXPENSE">Saídas</option>
-        </select>
-        <select value={paymentMethodFilter} onChange={e => setPaymentMethodFilter(e.target.value)}
-          className="bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2 text-sm">
-          <option value="">Todas as formas</option>
-          {PAYMENT_METHODS.map((method) => (
-            <option key={method.value} value={method.value}>{method.label}</option>
-          ))}
-        </select>
-        {isBusinessPlan && (
-          <select value={businessStatusFilter} onChange={e => setBusinessStatusFilter(e.target.value)}
-            className="bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2 text-sm">
-            <option value="">Todos os status</option>
-            <option value="PENDING">A pagar</option>
-            <option value="OVERDUE">Vencidas</option>
-            <option value="PAID">Pagas</option>
-          </select>
+        {isBusinessPlan ? (
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setBusinessStatusFilter('')}
+              className={`rounded-lg border px-3 py-2 text-sm ${businessStatusFilter === '' ? 'border-cyan-400 bg-cyan-400/20 text-cyan-100' : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-cyan-500/40'}`}
+            >
+              Todas
+            </button>
+            <button
+              type="button"
+              onClick={() => setBusinessStatusFilter('PENDING')}
+              className={`rounded-lg border px-3 py-2 text-sm ${businessStatusFilter === 'PENDING' ? 'border-amber-400 bg-amber-400/20 text-amber-100' : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-amber-500/40'}`}
+            >
+              A vencer
+            </button>
+            <button
+              type="button"
+              onClick={() => setBusinessStatusFilter('OVERDUE')}
+              className={`rounded-lg border px-3 py-2 text-sm ${businessStatusFilter === 'OVERDUE' ? 'border-rose-400 bg-rose-400/20 text-rose-100' : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-rose-500/40'}`}
+            >
+              Vencidas
+            </button>
+            <button
+              type="button"
+              onClick={() => setBusinessStatusFilter('PAID')}
+              className={`rounded-lg border px-3 py-2 text-sm ${businessStatusFilter === 'PAID' ? 'border-emerald-400 bg-emerald-400/20 text-emerald-100' : 'border-slate-700 bg-slate-950 text-slate-300 hover:border-emerald-500/40'}`}
+            >
+              Pagas
+            </button>
+          </div>
+        ) : (
+          <>
+            <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+              className="bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2 text-sm">
+              <option value="">Todos</option>
+              <option value="INCOME">Entradas</option>
+              <option value="EXPENSE">Saídas</option>
+            </select>
+            <select value={paymentMethodFilter} onChange={e => setPaymentMethodFilter(e.target.value)}
+              className="bg-slate-950 border border-cyan-500/20 text-white rounded-lg px-3 py-2 text-sm">
+              <option value="">Todas as formas</option>
+              {PAYMENT_METHODS.map((method) => (
+                <option key={method.value} value={method.value}>{method.label}</option>
+              ))}
+            </select>
+            {selectedFilterPayment && <PaymentMethodChip meta={selectedFilterPayment} />}
+          </>
         )}
-        {selectedFilterPayment && <PaymentMethodChip meta={selectedFilterPayment} />}
         <ExportData
           data={transactions}
           columns={[
@@ -1104,11 +1145,11 @@ export default function TransactionsPage() {
         ) : transactions.length === 0 ? (
           <EmptyState
             title="Nenhum lançamento encontrado"
-            description={search || typeFilter || paymentMethodFilter 
+            description={search || typeFilter || paymentMethodFilter || businessStatusFilter
               ? "Tente ajustar os filtros para encontrar o que você procura"
-              : "Comece adicionando suas primeiras entradas e saídas"}
+              : (isBusinessPlan ? "Comece adicionando seus boletos e contas a pagar" : "Comece adicionando suas primeiras entradas e saídas")}
             action={{
-              label: 'Novo Lançamento',
+              label: isBusinessPlan ? 'Adicionar boleto' : 'Novo Lançamento',
               onClick: () => setShowForm(true),
             }}
           />
@@ -1124,7 +1165,7 @@ export default function TransactionsPage() {
               <span>Selecionar todos os lançamentos visíveis</span>
             </div>
 
-            {groupedTransactions.monthlyInvoiceSummary.length > 0 && (
+            {!isBusinessPlan && groupedTransactions.monthlyInvoiceSummary.length > 0 && (
               <div className="rounded-2xl border border-violet-500/20 bg-violet-500/10 p-4">
                 <p className="text-xs uppercase tracking-[0.2em] text-violet-200/80 mb-3">Resumo geral das faturas</p>
                 <div className="grid gap-2 md:grid-cols-2">
@@ -1140,7 +1181,7 @@ export default function TransactionsPage() {
               </div>
             )}
 
-            {groupedTransactions.invoiceGroups.map((group) => {
+            {!isBusinessPlan && groupedTransactions.invoiceGroups.map((group) => {
               const isOpen = openGroups[group.groupKey] ?? false
               return (
                 <div key={group.groupKey} className="rounded-2xl border border-violet-500/20 bg-violet-500/10 overflow-hidden">
@@ -1168,7 +1209,11 @@ export default function TransactionsPage() {
               )
             })}
 
-            {groupedTransactions.regularItems.length > 0 && (
+            {isBusinessPlan ? (
+              <div className="space-y-3">
+                {transactions.map(renderTransactionItem)}
+              </div>
+            ) : groupedTransactions.regularItems.length > 0 && (
               <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 overflow-hidden">
                 <button
                   type="button"
