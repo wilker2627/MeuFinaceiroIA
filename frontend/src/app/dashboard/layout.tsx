@@ -28,6 +28,17 @@ const businessNavItems = [
   { href: '/dashboard/settings', label: 'Configuração', icon: Settings },
 ]
 
+const businessAllowedBasePaths = [
+  '/dashboard/transactions',
+  '/dashboard/cashflow',
+  '/dashboard/settings',
+]
+
+function isBusinessPathAllowed(pathname: string) {
+  if (pathname === '/dashboard') return true
+  return businessAllowedBasePaths.some((basePath) => pathname === basePath || pathname.startsWith(`${basePath}/`))
+}
+
 type BusinessProfile = {
   cnpj: string
   businessName: string
@@ -64,6 +75,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     setMobileMenuOpen(false)
   }, [pathname])
+
+  useEffect(() => {
+    if (loading || !tenant || !pathname) return
+    if (!isBusinessPlan) return
+    if (!businessProfileDone) return
+    if (isBusinessPathAllowed(pathname)) return
+
+    router.replace('/dashboard')
+  }, [loading, tenant, pathname, isBusinessPlan, businessProfileDone, router])
 
   useEffect(() => {
     let active = true
