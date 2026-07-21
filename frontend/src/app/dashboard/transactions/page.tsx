@@ -339,6 +339,8 @@ export default function TransactionsPage() {
   const [saving, setSaving] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; txIds: string[] }>({ open: false, txIds: [] })
   const [deleting, setDeleting] = useState(false)
+  const [paymentConfirm, setPaymentConfirm] = useState<{ open: boolean; tx: Transaction | null; nextPaid: boolean }>({ open: false, tx: null, nextPaid: false })
+  const [updatingPayment, setUpdatingPayment] = useState(false)
   const [selectedTransactionIds, setSelectedTransactionIds] = useState<string[]>([])
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null)
   const [editForm, setEditForm] = useState<{ amount: string; cardBrand: string; customCardBrand: string; dueMonth: string }>({
@@ -722,15 +724,28 @@ export default function TransactionsPage() {
 
   async function handleTogglePaid(tx: Transaction) {
     try {
+      setUpdatingPayment(true)
       await api.patch(`/dashboard/transactions/${tx.id}`, {
         isPaid: !Boolean(tx.isPaid)
       })
       addToast(tx.isPaid ? 'Despesa marcada como pendente.' : 'Despesa marcada como paga.', 'success')
+      setPaymentConfirm({ open: false, tx: null, nextPaid: false })
       load()
       triggerDashboardRefresh()
     } catch (err: any) {
       addToast(err.response?.data?.error || 'Erro ao atualizar status do pagamento.', 'error')
+    } finally {
+      setUpdatingPayment(false)
     }
+  }
+
+  function requestTogglePaid(tx: Transaction) {
+    setPaymentConfirm({ open: true, tx, nextPaid: !Boolean(tx.isPaid) })
+  }
+
+  async function handlePaymentConfirm() {
+    if (!paymentConfirm.tx) return
+    await handleTogglePaid(paymentConfirm.tx)
   }
 
   async function copyText(value: string, successMessage: string) {
@@ -980,7 +995,7 @@ export default function TransactionsPage() {
               {isBusinessExpenseItem && (
                 <button
                   type="button"
-                  onClick={() => handleTogglePaid(tx)}
+                  onClick={() => requestTogglePaid(tx)}
                   className={`rounded-md border px-2 py-1 text-[11px] font-semibold ${tx.isPaid ? 'border-amber-500/35 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20' : 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20'}`}
                 >
                   {tx.isPaid ? 'Marcar pendente' : 'Marcar pago'}
@@ -1465,11 +1480,24 @@ export default function TransactionsPage() {
 
       {/* Modal de confirmação de delete */}
       <ConfirmModal
+        isOpen={paymentConfirm.open}
+        title={paymentConfirm.nextPaid ? 'Marcar como Pago' : 'Marcar como Pendente'}
+        message={paymentConfirm.tx
+          ? `${paymentConfirm.nextPaid ? 'Deseja marcar como pago' : 'Deseja marcar como pendente'} o lançamento "${cleanDescription(paymentConfirm.tx.description)}"?`
+          : 'Deseja confirmar esta alteração?'}
+        confirmText="Sim"
+        cancelText="Não"
+        isLoading={updatingPayment}
+        onConfirm={handlePaymentConfirm}
+        onCancel={() => setPaymentConfirm({ open: false, tx: null, nextPaid: false })}
+      />
+
+      <ConfirmModal
         isOpen={deleteConfirm.open}
         title={deleteConfirm.txIds.length > 1 ? 'Remover Lancamentos' : 'Remover Lancamento'}
         message={deleteConfirm.txIds.length > 1 ? `Tem certeza que deseja remover ${deleteConfirm.txIds.length} lancamentos? Esta acao nao pode ser desfeita.` : 'Tem certeza que deseja remover este lancamento? Esta acao nao pode ser desfeita.'}
-        confirmText="Remover"
-        cancelText="Cancelar"
+        confirmText="Sim"
+        cancelText="Não"
         isDestructive
         isLoading={deleting}
         onConfirm={handleDeleteConfirm}
