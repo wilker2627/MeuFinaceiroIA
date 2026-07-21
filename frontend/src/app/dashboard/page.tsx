@@ -252,6 +252,13 @@ export default function DashboardPage() {
     totalPending: 0,
     totalOverdue: 0
   })
+  const [businessTab, setBusinessTab] = useState<'MONTH' | 'BOLETOS'>('MONTH')
+  const [businessUpcomingBoletos, setBusinessUpcomingBoletos] = useState<Array<{
+    monthKey: string
+    total: number
+    count: number
+    items: any[]
+  }>>([])
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -299,6 +306,33 @@ export default function DashboardPage() {
     dashboardLastLoadAtRef.current = nowTs
     setLoading(true)
     setLoadError('')
+
+    async function loadBusinessUpcomingMonths() {
+      if (!isBusinessPlan) return
+
+      const now = new Date()
+      const monthKeys = Array.from({ length: 8 }, (_, index) => {
+        const date = new Date(now.getFullYear(), now.getMonth() + index, 1)
+        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+      })
+
+      const responses = await Promise.allSettled(monthKeys.map((monthKey) =>
+        api.get(`/dashboard/transactions?month=${monthKey}&monthField=dueDate&type=EXPENSE&status=PENDING&limit=500&page=1`)
+      ))
+
+      const months = responses.map((response, index) => {
+        const monthKey = monthKeys[index]
+        const items = response.status === 'fulfilled' ? (response.value.data?.transactions || []) : []
+        return {
+          monthKey,
+          count: items.length,
+          total: items.reduce((sum: number, tx: any) => sum + Number(tx?.amount || 0), 0),
+          items,
+        }
+      })
+
+      setBusinessUpcomingBoletos(months.filter((month) => month.count > 0))
+    }
 
     try {
       try {
@@ -372,6 +406,7 @@ export default function DashboardPage() {
               totalPending: pending.reduce((sum: number, tx: any) => sum + Number(tx?.amount || 0), 0),
               totalOverdue: overdue.reduce((sum: number, tx: any) => sum + Number(tx?.amount || 0), 0),
             })
+            await loadBusinessUpcomingMonths()
           }
 
           if (force || Date.now() - diagnosticsLastLoadAtRef.current > 60000) {
@@ -506,6 +541,7 @@ export default function DashboardPage() {
           totalPending: pending.reduce((sum: number, tx: any) => sum + Number(tx?.amount || 0), 0),
           totalOverdue: overdue.reduce((sum: number, tx: any) => sum + Number(tx?.amount || 0), 0),
         })
+        await loadBusinessUpcomingMonths()
       }
 
       if (force || Date.now() - diagnosticsLastLoadAtRef.current > 60000) {
@@ -1314,7 +1350,7 @@ export default function DashboardPage() {
               <div>
                 <p className="text-[11px] uppercase tracking-[0.24em] text-cyan-300/80">Modo Empresa</p>
                 <h1 className="mt-2 text-3xl font-black text-white">Boletos e pagamentos</h1>
-                <p className="mt-2 text-sm text-slate-300">Painel enxuto para lançar boletos, copiar código/QR e acompanhar pagamentos do mês.</p>
+                <p className="mt-2 text-sm text-slate-300">Aba do mês mostra somente boletos a pagar agora. Aba Boletos mostra próximos meses.</p>
               </div>
               <div className="flex gap-2">
                 <Link href="/dashboard/transactions" className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-cyan-300">Lançar boleto</Link>
@@ -1328,14 +1364,31 @@ export default function DashboardPage() {
               <BusinessMetricCard label="Saldo em caixa" value={Number(summary.balance.total || 0)} icon={DollarSign} color="cyan" note={summary.cashFlow.profit >= 0 ? 'Operacao positiva' : 'Operacao pressionada'} />
             </div>
 
-            <div className="mt-6 grid gap-4 lg:grid-cols-2">
-              <div className="rounded-2xl border border-slate-700/70 bg-slate-950/60 p-4">
+            <div className="mt-6 flex gap-2 rounded-2xl border border-slate-700/70 bg-slate-950/50 p-2">
+              <button
+                type="button"
+                onClick={() => setBusinessTab('MONTH')}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${businessTab === 'MONTH' ? 'bg-cyan-400 text-slate-950' : 'text-slate-300 hover:bg-slate-800'}`}
+              >
+                Mês atual
+              </button>
+              <button
+                type="button"
+                onClick={() => setBusinessTab('BOLETOS')}
+                className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${businessTab === 'BOLETOS' ? 'bg-cyan-400 text-slate-950' : 'text-slate-300 hover:bg-slate-800'}`}
+              >
+                Boletos
+              </button>
+            </div>
+
+            {businessTab === 'MONTH' ? (
+              <div className="mt-4 rounded-2xl border border-slate-700/70 bg-slate-950/60 p-4">
                 <div className="mb-3 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-white">Boletos a pagar</p>
-                  <p className="text-xs text-slate-400">{businessBillSummary.monthKey || new Date().toISOString().slice(0, 7)}</p>
+                  <p className="text-sm font-semibold text-white">Boletos a pagar no mês</p>
+                  <p className="text-xs text-slate-400">{businessBillSummary.monthKey ? formatMonthKeyToPtBr(businessBillSummary.monthKey) : formatMonthKeyToPtBr(new Date().toISOString().slice(0, 7))}</p>
                 </div>
                 <div className="space-y-2">
-                  {businessBillSummary.pending.slice(0, 5).map((tx: any) => (
+                  {businessBillSummary.pending.map((tx: any) => (
                     <div key={tx.id} className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-sm">
                       <div className="flex items-center justify-between gap-2">
                         <span className="truncate text-white">{cleanDescription(tx.description)}</span>
@@ -1347,40 +1400,37 @@ export default function DashboardPage() {
                   {businessBillSummary.pending.length === 0 && <p className="text-sm text-slate-500">Nenhum boleto pendente neste mes.</p>}
                 </div>
               </div>
-
-              <div className="rounded-2xl border border-slate-700/70 bg-slate-950/60 p-4">
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-sm font-semibold text-white">Boletos pagos</p>
-                  <p className="text-xs text-slate-400">{paidCount} pagos</p>
-                </div>
-                <div className="space-y-2">
-                  {businessBillSummary.paid.slice(0, 5).map((tx: any) => (
-                    <div key={tx.id} className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-sm">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-white">{cleanDescription(tx.description)}</span>
-                        <span className="font-semibold text-emerald-200">{formatCurrency(Number(tx.amount || 0))}</span>
+            ) : (
+              <div className="mt-4 space-y-3">
+                {businessUpcomingBoletos.map((group) => (
+                  <div key={group.monthKey} className="rounded-2xl border border-cyan-500/20 bg-cyan-500/10 p-4">
+                    <div className="mb-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{formatMonthKeyToPtBr(group.monthKey)}</p>
+                        <p className="text-xs text-cyan-200/80">{group.count} boleto(s) pendente(s)</p>
                       </div>
-                      <p className="mt-1 text-xs text-slate-400">Pago em: {tx.date ? formatDate(tx.date) : 'Nao informado'}</p>
+                      <p className="text-sm font-semibold text-cyan-100">{formatCurrency(group.total)}</p>
                     </div>
-                  ))}
-                  {businessBillSummary.paid.length === 0 && <p className="text-sm text-slate-500">Nenhum boleto pago neste mes.</p>}
-                </div>
-              </div>
-            </div>
-
-            {businessBillSummary.overdue.length > 0 && (
-              <div className="mt-4 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4">
-                <p className="mb-2 text-sm font-semibold text-white">Vencidos</p>
-                <div className="space-y-2">
-                  {businessBillSummary.overdue.slice(0, 5).map((tx: any) => (
-                    <div key={tx.id} className="rounded-xl border border-rose-500/20 bg-slate-950/50 p-3 text-sm">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="truncate text-white">{cleanDescription(tx.description)}</span>
-                        <span className="font-semibold text-rose-200">{formatCurrency(Number(tx.amount || 0))}</span>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-400">Venceu em: {tx.dueDate ? formatDate(tx.dueDate) : 'Nao informado'}</p>
+                    <div className="space-y-2">
+                      {group.items.slice(0, 6).map((tx: any) => (
+                        <div key={tx.id} className="rounded-xl border border-cyan-500/20 bg-slate-950/55 p-3 text-sm">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-white">{cleanDescription(tx.description)}</span>
+                            <span className="font-semibold text-cyan-200">{formatCurrency(Number(tx.amount || 0))}</span>
+                          </div>
+                          <p className="mt-1 text-xs text-slate-400">Vencimento: {tx.dueDate ? formatDate(tx.dueDate) : 'Nao informado'}</p>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
+                ))}
+                {businessUpcomingBoletos.length === 0 && (
+                  <p className="rounded-xl border border-slate-700/70 bg-slate-950/60 p-4 text-sm text-slate-400">Nenhum boleto pendente encontrado para os próximos meses.</p>
+                )}
+                <div className="pt-1">
+                  <Link href="/dashboard/transactions" className="inline-flex rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-400/20">
+                    Ver gestão completa de boletos
+                  </Link>
                 </div>
               </div>
             )}
