@@ -353,6 +353,7 @@ export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('')
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('')
   const [businessStatusFilter, setBusinessStatusFilter] = useState('')
@@ -426,6 +427,14 @@ export default function TransactionsPage() {
   const scanTimerRef = useRef<number | null>(null)
   const scannerControlsRef = useRef<{ stop: () => void } | null>(null)
   const pendingScanRef = useRef<{ key: string; mode: 'qr' | 'barcode'; at: number } | null>(null)
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 300)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [search])
 
   useEffect(() => {
     if (!isBusinessPlan) return
@@ -556,7 +565,7 @@ export default function TransactionsPage() {
 
         const hints = new Map()
         hints.set(DecodeHintType.POSSIBLE_FORMATS, scannerMode === 'qr' ? QR_SCAN_FORMATS : BARCODE_SCAN_FORMATS)
-        hints.set(DecodeHintType.TRY_HARDER, true)
+        hints.set(DecodeHintType.TRY_HARDER, scannerMode === 'barcode')
 
         const reader = new BrowserMultiFormatReader(hints)
         scannerControlsRef.current = await reader.decodeFromConstraints(
@@ -564,8 +573,8 @@ export default function TransactionsPage() {
             audio: false,
             video: {
               facingMode: { ideal: 'environment' },
-              width: { ideal: 1080 },
-              height: { ideal: 1920 },
+              width: { ideal: 720 },
+              height: { ideal: 1280 },
               aspectRatio: { ideal: 9 / 16 },
               advanced: [{ focusMode: 'continuous' } as any]
             }
@@ -704,7 +713,7 @@ export default function TransactionsPage() {
   async function load() {
     setLoading(true)
     const params = new URLSearchParams()
-    if (search) params.set('search', search)
+    if (debouncedSearch) params.set('search', debouncedSearch)
     if (isBusinessPlan) {
       params.set('type', 'EXPENSE')
     } else {
@@ -712,20 +721,24 @@ export default function TransactionsPage() {
       if (paymentMethodFilter) params.set('paymentMethod', paymentMethodFilter)
     }
     if (isBusinessPlan && businessStatusFilter) params.set('status', businessStatusFilter)
-    const [t, c, a] = await Promise.all([
-      api.get(`/dashboard/transactions?${params}`),
-      api.get('/dashboard/categories?catalog=1'),
-      api.get('/dashboard/accounts'),
-    ])
+    const t = await api.get(`/dashboard/transactions?${params}`)
     const nextTransactions = t.data.transactions
     setTransactions(nextTransactions)
     setSelectedTransactionIds((prev) => prev.filter((id) => nextTransactions.some((tx: Transaction) => tx.id === id)))
-    setCategories(c.data)
-    setAccounts(a.data)
     setLoading(false)
   }
 
-  useEffect(() => { load() }, [search, typeFilter, paymentMethodFilter, businessStatusFilter, isBusinessPlan])
+  async function loadMetadata() {
+    const [c, a] = await Promise.all([
+      api.get('/dashboard/categories?catalog=1'),
+      api.get('/dashboard/accounts'),
+    ])
+    setCategories(c.data)
+    setAccounts(a.data)
+  }
+
+  useEffect(() => { load() }, [debouncedSearch, typeFilter, paymentMethodFilter, businessStatusFilter, isBusinessPlan])
+  useEffect(() => { loadMetadata() }, [])
 
   const businessExpenseSummary = useMemo(() => {
     const expenses = transactions.filter((tx) => tx.type === 'EXPENSE')
