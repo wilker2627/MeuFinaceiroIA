@@ -118,30 +118,60 @@ function extractPixCopyFromDescription(description: string) {
   return match?.[1]?.trim() || ''
 }
 
+function formatIsoDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
+function parseDueDateFromFactor(factor: number) {
+  if (!Number.isFinite(factor) || factor <= 0) return undefined
+
+  const legacyBase = new Date('1997-10-07T00:00:00.000Z')
+  const legacyDue = new Date(legacyBase.getTime() + factor * 24 * 60 * 60 * 1000)
+  const resetBase = new Date('2025-02-22T00:00:00.000Z')
+
+  // Since 2025 the fator de vencimento restarted at 1000.
+  if (factor >= 1000) {
+    const modernDue = new Date(resetBase.getTime() + (factor - 1000) * 24 * 60 * 60 * 1000)
+    if (legacyDue < resetBase) {
+      return formatIsoDate(modernDue)
+    }
+  }
+
+  return formatIsoDate(legacyDue)
+}
+
 function parsePaymentCode(rawCode: string): { amount?: number; dueDate?: string; normalizedCode?: string } {
   const digits = String(rawCode || '').replace(/\D/g, '')
   if (!digits) return {}
 
   let barcode = ''
+  let amount: number | undefined
+  let dueDate: string | undefined
+
   if (digits.length === 44) {
     barcode = digits
   } else if (digits.length === 47) {
     barcode = `${digits.slice(0, 4)}${digits.slice(32, 33)}${digits.slice(33, 47)}${digits.slice(4, 8)}${digits.slice(10, 20)}${digits.slice(21, 31)}`
+  } else if (digits.length === 48 && digits.startsWith('8')) {
+    // Convenio/arrecadacao line digitavel: remove DV at the end of each 12-digit block.
+    barcode = `${digits.slice(0, 11)}${digits.slice(12, 23)}${digits.slice(24, 35)}${digits.slice(36, 47)}`
   } else {
     return { normalizedCode: digits }
   }
 
-  const factor = Number(barcode.slice(5, 9))
-  const amountCents = Number(barcode.slice(9, 19))
-
-  let dueDate: string | undefined
-  if (Number.isFinite(factor) && factor > 0) {
-    const baseDate = new Date('1997-10-07T00:00:00.000Z')
-    const due = new Date(baseDate.getTime() + factor * 24 * 60 * 60 * 1000)
-    dueDate = `${due.getFullYear()}-${String(due.getMonth() + 1).padStart(2, '0')}-${String(due.getDate()).padStart(2, '0')}`
+  if (barcode.startsWith('8')) {
+    const amountRef = barcode[2]
+    const amountCentsRaw = Number(barcode.slice(4, 15))
+    if (['6', '8'].includes(amountRef) && Number.isFinite(amountCentsRaw) && amountCentsRaw > 0) {
+      amount = amountCentsRaw / 100
+    }
+  } else {
+    const factor = Number(barcode.slice(5, 9))
+    const amountCents = Number(barcode.slice(9, 19))
+    dueDate = parseDueDateFromFactor(factor)
+    amount = Number.isFinite(amountCents) && amountCents > 0 ? amountCents / 100 : undefined
   }
 
-  const amount = Number.isFinite(amountCents) && amountCents > 0 ? amountCents / 100 : undefined
   return { amount, dueDate, normalizedCode: barcode }
 }
 
@@ -440,7 +470,7 @@ export default function TransactionsPage() {
   function applyScannedCode(rawValue: string, mode: 'qr' | 'barcode' = 'barcode') {
     const scanned = String(rawValue || '').trim()
     const digits = scanned.replace(/\D/g, '')
-    const isBarcode = digits.length === 44 || digits.length === 47
+    const isBarcode = digits.length === 44 || digits.length === 47 || (digits.length === 48 && digits.startsWith('8'))
 
     if (mode === 'qr' && !isLikelyPixPayload(scanned)) {
       addToast('Esse conteudo nao parece um QR Pix. Tente o modo Código de Barras.', 'warning')
@@ -474,20 +504,12 @@ export default function TransactionsPage() {
       return
     }
 
-    if (digits.length >= 30) {
-      const parsed = parsePaymentCode(digits)
-      setForm((prev) => ({
-        ...prev,
-        businessDocCode: parsed.normalizedCode || digits,
-        amount: parsed.amount ? String(parsed.amount.toFixed(2)) : prev.amount,
-        businessDueDate: parsed.dueDate || prev.businessDueDate,
-      }))
-      addToast('Leitura realizada. Revise os dados antes de salvar.', 'success')
+    if (mode === 'barcode') {
+      addToast('Leitura detectada, mas nao parece um boleto valido. Tente aproximar e enquadrar apenas a linha de barras.', 'warning')
       return
     }
 
-    setForm((prev) => ({ ...prev, businessPixCopy: scanned, paymentMethod: 'PIX' }))
-    addToast('Leitura realizada. Conteudo aplicado no campo Pix.', 'success')
+    addToast('Leitura detectada, mas nao parece um QR Pix valido.', 'warning')
   }
 
   async function openCameraScanner(mode: 'qr' | 'barcode') {
