@@ -525,9 +525,9 @@ export default function TransactionsPage() {
             audio: false,
             video: {
               facingMode: { ideal: 'environment' },
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
-              aspectRatio: { ideal: 16 / 9 },
+              width: { ideal: 1080 },
+              height: { ideal: 1920 },
+              aspectRatio: { ideal: 9 / 16 },
               advanced: [{ focusMode: 'continuous' } as any]
             }
           },
@@ -1274,7 +1274,7 @@ export default function TransactionsPage() {
             </div>
 
             <div className="rounded-2xl border border-slate-700 bg-black/60 p-2">
-              <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black">
+              <div className="relative mx-auto aspect-[9/16] max-h-[74vh] w-full max-w-sm overflow-hidden rounded-xl bg-black">
                 <video ref={videoRef} className="h-full w-full object-contain" muted playsInline autoPlay />
                 {scannerMode === 'barcode' && (
                   <div className="pointer-events-none absolute inset-x-6 top-1/2 h-0.5 -translate-y-1/2 bg-cyan-400/80 shadow-[0_0_0_1px_rgba(34,211,238,0.35)]" />
@@ -1286,7 +1286,7 @@ export default function TransactionsPage() {
             {scannerLoading && <p className="mt-1 text-xs text-cyan-300">Inicializando camera...</p>}
             {scannerError && <p className="mt-1 text-xs text-rose-300">{scannerError}</p>}
             {scannerMode === 'barcode' && (
-              <p className="mt-2 text-xs text-slate-400">Aponte o boleto na horizontal e mantenha a linha do código dentro da faixa azul.</p>
+              <p className="mt-2 text-xs text-slate-400">Segure o celular na vertical e mantenha o boleto centralizado na faixa azul.</p>
             )}
           </div>
         </div>
